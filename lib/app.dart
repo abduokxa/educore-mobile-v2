@@ -95,6 +95,7 @@ class _EducoreAppState extends State<EducoreApp> {
     _lock.addListener(_rebuild);
     _update.start();
     _update.addListener(_rebuild);
+    PushService.init(onOpen: _openHref);
     Net.I; // start watching the connection
     Refresh.I;
     _boot();
@@ -181,20 +182,27 @@ class _EducoreAppState extends State<EducoreApp> {
     _listenForLinks();
   }
 
+  /// Opens the screen a notice or a link is about (like /parent/fees or /parent/notices?id=x). Waits for the app to be signed in and ready.
+  void _openHref(String? href, [int tries = 12]) {
+    if (_session == null || Nav.I.tabs.isEmpty) {
+      if (tries > 0) Future<void>.delayed(const Duration(milliseconds: 500), () => _openHref(href, tries - 1));
+      return;
+    }
+    final notice = href == null ? null : RegExp(r'/notices\?id=([A-Za-z0-9_-]+)').firstMatch(href);
+    if (notice != null) {
+      Nav.I.go('Notices', notice: notice.group(1));
+    } else {
+      Nav.I.go(href == null ? 'Notices' : tabFor(href));
+    }
+  }
+
   /// Links from emails arrive as https://school.edu-core.ng/parent/fees; only the portal pages are handed to the app.
   void _listenForLinks() {
     _links?.cancel();
     final links = AppLinks();
     void open(Uri u) {
       final m = RegExp(r'^https?://[^/]+(/(?:parent|student|teacher)(?:/[A-Za-z0-9_\-/]*)?(?:\?[^#]*)?)').firstMatch(u.toString());
-      if (m == null) return;
-      final href = m.group(1)!;
-      final notice = RegExp(r'/notices\?id=([A-Za-z0-9_-]+)').firstMatch(href);
-      if (notice != null) {
-        Nav.I.go('Notices', notice: notice.group(1));
-      } else {
-        Nav.I.go(tabFor(href));
-      }
+      if (m != null) _openHref(m.group(1));
     }
 
     links.getInitialLink().then((u) => u == null ? null : open(u)).catchError((_) => null);

@@ -38,12 +38,26 @@ On your own computer: `flutter build apk --release --dart-define=ROOT_DOMAIN=edu
 Links in emails (`https://<school>.edu-core.ng/parent/...`) open the app once the owner has added the app's signing fingerprint on the
 server's *Mobile app* page. The payment page and Google sign-in return to the app through `educore://payment` and `educore://google-login`.
 
-## Push notifications (not switched on yet)
+## Push notifications
 
-The Notices tab always works. Phone notifications need Firebase: the old app used Expo's push service, which only works with Expo
-builds. For this app add a Firebase project, put `google-services.json` in `android/app/`, add `firebase_messaging`, set
-`PushService.tokenProvider` (see `lib/features/push.dart`) to return the FCM token, and have the server send to FCM tokens
-(the `devices` endpoint already receives `kind: fcm`). Until then the Account page hides the notification card.
+The app receives notices through Firebase (FCM). `android/app/google-services.json` (project `educore-62ee3`, package `ng.educore.app`)
+is in the repo, and the build applies the Google services plugin only when that file is present.
+
+On the server (educore-web):
+
+1. Firebase console → Project settings → **Service accounts** → **Generate new private key**. Keep the file private.
+2. Put the file on the server, outside the web folder, and set in `.env`:
+   `FCM_SERVICE_ACCOUNT_FILE=/path/to/educore-62ee3-firebase-adminsdk.json` and `PUSH_DRIVER=expo,fcm`
+   (`expo` keeps the older Expo app working while it is still installed; use just `fcm` once it is gone).
+   Then `php artisan config:cache` and run `php artisan migrate`.
+3. Sign in to the app on a phone and open **Account → Send me a test notice**. The owner's *System check* page also reports whether
+   push is on and whether the Firebase key is found.
+
+To replace the Firebase file in a build without committing it, add a repository secret `GOOGLE_SERVICES_JSON` (the file's contents);
+the workflow writes it over the one in the repo.
+
+iPhone later: add an iOS app in Firebase, put `GoogleService-Info.plist` in `ios/Runner/`, upload an Apple APNs key in Firebase →
+Cloud Messaging, and turn on the Push Notifications capability in Xcode.
 
 ## Layout
 

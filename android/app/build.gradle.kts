@@ -12,6 +12,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications (notices shown while the app is open) needs newer Java classes on older phones.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -55,4 +57,13 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+}
+
+// Push notifications: only when the Firebase file is there, so a build without it still works (it just gets no notices).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

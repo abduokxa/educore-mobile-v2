@@ -5,6 +5,9 @@ import 'base.dart';
 /// Shows messages on top of everything: a green tick for good news, a red mark for a problem.
 final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
 
+/// Lets code outside the widget tree open a full-screen page, such as a document preview.
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 class Notify {
   void _show(String title, String? detail, String icon, Color tint) {
     final m = messengerKey.currentState;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../ui/ui.dart';
 import 'files.dart';
+import 'pdf_view.dart';
 
 /// Two ways to get a document the school made: look at it now, or save and share it. The files are the same PDFs as on the website.
 class DocActions extends StatefulWidget {
@@ -19,7 +20,7 @@ class _DocActionsState extends State<DocActions> {
   Future<void> _run(String kind) async {
     setState(() => _busy = kind);
     try {
-      await (kind == 'view' ? viewDocument : saveDocument)(widget.path, widget.query, widget.name);
+      await (kind == 'view' ? (String p, Map<String, String?> q, String n) => previewDocument(p, q, n, title: widget.label ?? n) : saveDocument)(widget.path, widget.query, widget.name);
     } catch (e) {
       notify.err('Could not open the file', e.toString().replaceFirst('Exception: ', ''));
     } finally {

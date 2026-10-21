@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../features/docs.dart';
+import '../features/pick.dart';
 import '../shell/nav.dart';
 import '../ui/ui.dart';
 import 'parent.dart';
@@ -55,5 +56,5 @@ class StudentHome extends StatelessWidget {
 class StudentResults extends StatelessWidget {
   const StudentResults({super.key});
   @override
-  Widget build(BuildContext context) => const ResultsScreen(path: 'student/results', pdf: 'student/results/pdf', title: 'My results');
+  Widget build(BuildContext context) => PickGate(title: 'My results', builder: (context, c) => ResultsScreen(path: 'student/results', pdf: 'student/results/pdf', title: 'My results', choice: c));
 }

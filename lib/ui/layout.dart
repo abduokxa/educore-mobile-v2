@@ -178,11 +178,11 @@ class Screen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = Layout.of(context);
     final chrome = Chrome.of(context);
-    final top = MediaQuery.paddingOf(context).top;
+    final inset = MediaQuery.paddingOf(context);
     final body = SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.fromLTRB(l.gutter, top + 6, l.gutter, 24),
+      padding: EdgeInsets.fromLTRB(l.gutter, 6, l.gutter, 24 + inset.bottom),
       child: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: l.maxWidth),
@@ -195,8 +195,10 @@ class Screen extends StatelessWidget {
         ),
       ),
     );
+    // The scrolling part starts below the status bar (battery, clock), so nothing slides under it.
     return Container(
       color: color.bg,
+      padding: EdgeInsets.only(top: inset.top),
       child: Column(children: [
         Expanded(
           child: onRefresh == null
@@ -206,7 +208,7 @@ class Screen extends StatelessWidget {
         if (footer != null)
           Container(
             decoration: BoxDecoration(color: color.card, border: Border(top: BorderSide(color: color.line, width: 0.6))),
-            padding: EdgeInsets.fromLTRB(l.gutter, 10, l.gutter, 10),
+            padding: EdgeInsets.fromLTRB(l.gutter, 10, l.gutter, 10 + inset.bottom),
             child: Center(child: ConstrainedBox(constraints: BoxConstraints(maxWidth: l.maxWidth), child: footer)),
           ),
       ]),

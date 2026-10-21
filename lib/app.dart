@@ -240,6 +240,7 @@ class _EducoreAppState extends State<EducoreApp> {
       title: 'Educore',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: messengerKey,
+      navigatorKey: navigatorKey,
       themeMode: dark ? ThemeMode.dark : ThemeMode.light,
       theme: _themeData(dark),
       darkTheme: _themeData(dark),
@@ -369,10 +370,15 @@ class _RoleShellState extends State<_RoleShell> {
               if (!didPop) nav.back();
             },
             child: Column(children: [
+              // The tab bar below already keeps clear of the system buttons, so the screens do not add that space again.
               Expanded(
-                child: IndexedStack(
-                  index: index < 0 ? 0 : index,
-                  children: [for (final t in nav.tabs) _visited.contains(t) ? KeyedSubtree(key: ValueKey(t), child: _screen(t)) : const SizedBox.shrink()],
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeBottom: true,
+                  child: IndexedStack(
+                    index: index < 0 ? 0 : index,
+                    children: [for (final t in nav.tabs) _visited.contains(t) ? KeyedSubtree(key: ValueKey(t), child: _screen(t)) : const SizedBox.shrink()],
+                  ),
                 ),
               ),
               const AppTabBar(),

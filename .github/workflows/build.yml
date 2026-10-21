@@ -47,7 +47,7 @@ jobs:
         run: printf '%s' '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
       # Signing. Google Play only accepts a bundle signed with the key the app was first uploaded with.
       # Add these repository secrets: ANDROID_KEYSTORE_BASE64 (that keystore file, base64 encoded), ANDROID_KEYSTORE_PASSWORD,
-      # ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD. Without them only a test APK (debug key) is built, and no .aab is made.
+      # ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD. Without them both files are still built, but signed with a debug key (the bundle is named educore-debug-key.aab and Play will refuse it).
       - name: Prepare signing key
         if: ${{ env.HAS_KEY == 'true' }}
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.jks"
@@ -61,11 +61,12 @@ jobs:
           [ -z "$KEYSTORE_FILE" ] && unset KEYSTORE_FILE
           flutter build apk --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN
           cp build/app/outputs/flutter-apk/app-release.apk educore.apk
+          flutter build appbundle --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN
           if [ "$HAS_KEY" = "true" ]; then
-            flutter build appbundle --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN
             cp build/app/outputs/bundle/release/app-release.aab educore.aab
           else
-            echo "::warning::No signing key secrets are set, so only a test APK was built (debug key). No .aab was made, because Google Play would refuse it."
+            cp build/app/outputs/bundle/release/app-release.aab educore-debug-key.aab
+            echo "::warning::No signing key secrets are set, so the files are signed with a debug key. Google Play will refuse educore-debug-key.aab; add the keystore secrets (see README) to get a Play-ready educore.aab."
           fi
       # Say which key signed the files, and stop if the bundle is not signed with the key Google Play expects.
       - name: Check the signing key
@@ -81,15 +82,14 @@ jobs:
               exit 1
             fi
           fi
-      # Two separate downloads, each the file itself (not zipped): educore.apk to install, educore.aab for Google Play.
+      # Two separate downloads, each the file itself (not zipped): educore.apk to install, educore.aab for Google Play (educore-debug-key.aab if no signing key is set).
       - uses: actions/upload-artifact@v7
         with:
           path: educore.apk
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
-        if: ${{ env.HAS_KEY == 'true' }}
         with:
-          path: educore.aab
+          path: educore*.aab
           archive: false
           if-no-files-found: error

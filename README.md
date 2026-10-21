@@ -45,7 +45,7 @@ if the bundle's key is not the expected one.
    the SHA1 above.
 2. Base64 it: `base64 -w0 file.jks` (macOS: `base64 -i file.jks`).
 3. In GitHub: Settings → Secrets and variables → Actions → add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
-   `ANDROID_KEY_PASSWORD`. Run the **Build** workflow again; `educore.aab` is then signed with the right key.
+   `ANDROID_KEY_PASSWORD`. Run the **Build** workflow again; `educore.aab` is then signed with the right key. Until then the run still gives you a bundle, named `educore-debug-key.aab`, which Google Play will refuse.
 
 No old keystore? In Play Console → your app → *Test and release* → *App signing* → **Request upload key reset**. Create a new keystore
 (`keytool -genkeypair -v -storetype PKCS12 -keystore upload.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000`), upload its

@@ -60,9 +60,18 @@ jobs:
           [ -z "$KEYSTORE_FILE" ] && unset KEYSTORE_FILE
           flutter build apk --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN
           flutter build appbundle --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN
-      - uses: actions/upload-artifact@v4
+      # Two separate downloads, each the file itself (not zipped): educore.apk to install, educore.aab for Google Play.
+      - name: Name the files
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk educore.apk
+          cp build/app/outputs/bundle/release/app-release.aab educore.aab
+      - uses: actions/upload-artifact@v7
         with:
-          name: educore-android
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          path: educore.apk
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: educore.aab
+          archive: false
+          if-no-files-found: error

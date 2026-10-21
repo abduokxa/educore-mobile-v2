@@ -27,8 +27,8 @@ flutter analyze
 
 ## Build for Android without Expo (no paid build service)
 
-GitHub builds it for you: push to `main` (or run the **Build** workflow by hand) and download `educore-android` from the run's
-Artifacts (`app-release.apk` to install, `app-release.aab` for Google Play). To sign with your own upload key, add these repository
+GitHub builds it for you: push to `main` (or run the **Build** workflow by hand) and download `educore.apk` and `educore.aab` from the run's
+Artifacts: `educore.apk` (to install) and `educore.aab` (for Google Play), each its own download, not zipped. To sign with your own upload key, add these repository
 secrets: `ANDROID_KEYSTORE_BASE64` (the `.jks` file, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
 Without them the file is signed with a debug key (fine for testing, not for the store).
 

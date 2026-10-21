@@ -45,8 +45,9 @@ jobs:
       - name: Firebase file from secret
         if: ${{ env.HAS_FIREBASE == 'true' }}
         run: printf '%s' '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
-      # Signing: add the four secrets below (and ANDROID_KEYSTORE_BASE64, your upload keystore, base64 encoded)
-      # to sign with your own key. Without them the build is signed with a debug key: fine for testing, not for the store.
+      # Signing. Google Play only accepts a bundle signed with the key the app was first uploaded with.
+      # Add these repository secrets: ANDROID_KEYSTORE_BASE64 (that keystore file, base64 encoded), ANDROID_KEYSTORE_PASSWORD,
+      # ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD. Without them only a test APK (debug key) is built, and no .aab is made.
       - name: Prepare signing key
         if: ${{ env.HAS_KEY == 'true' }}
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.jks"
@@ -59,18 +60,35 @@ jobs:
         run: |
           [ -z "$KEYSTORE_FILE" ] && unset KEYSTORE_FILE
           flutter build apk --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN
-          flutter build appbundle --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN
-      # Two separate downloads, each the file itself (not zipped): educore.apk to install, educore.aab for Google Play.
-      - name: Name the files
-        run: |
           cp build/app/outputs/flutter-apk/app-release.apk educore.apk
-          cp build/app/outputs/bundle/release/app-release.aab educore.aab
+          if [ "$HAS_KEY" = "true" ]; then
+            flutter build appbundle --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN
+            cp build/app/outputs/bundle/release/app-release.aab educore.aab
+          else
+            echo "::warning::No signing key secrets are set, so only a test APK was built (debug key). No .aab was made, because Google Play would refuse it."
+          fi
+      # Say which key signed the files, and stop if the bundle is not signed with the key Google Play expects.
+      - name: Check the signing key
+        env:
+          EXPECTED_SHA1: "E5:72:C3:27:E6:B3:3F:36:1D:10:3D:25:1C:C5:55:D1:B2:8F:2A:BE"
+        run: |
+          echo "APK signed with:"; keytool -printcert -jarfile educore.apk | grep -E "Owner|SHA1" || true
+          if [ -f educore.aab ]; then
+            GOT=$(keytool -printcert -jarfile educore.aab | awk '/SHA1:/ {print $2; exit}')
+            echo "AAB signed with: $GOT"
+            if [ "$GOT" != "$EXPECTED_SHA1" ]; then
+              echo "::error::The bundle is signed with $GOT but Google Play expects $EXPECTED_SHA1. Use the keystore the app was first uploaded with (see README)."
+              exit 1
+            fi
+          fi
+      # Two separate downloads, each the file itself (not zipped): educore.apk to install, educore.aab for Google Play.
       - uses: actions/upload-artifact@v7
         with:
           path: educore.apk
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
+        if: ${{ env.HAS_KEY == 'true' }}
         with:
           path: educore.aab
           archive: false

@@ -32,6 +32,25 @@ Artifacts: `educore.apk` (to install) and `educore.aab` (for Google Play), each 
 secrets: `ANDROID_KEYSTORE_BASE64` (the `.jks` file, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
 Without them the file is signed with a debug key (fine for testing, not for the store).
 
+### Signing for Google Play (the key Play expects)
+
+Play only accepts a bundle signed with the **upload key the app was first published with**. For this app Play expects the certificate
+with SHA1 `E5:72:C3:27:E6:B3:3F:36:1D:10:3D:25:1C:C5:55:D1:B2:8F:2A:BE`. A build without your keystore is signed with a debug key
+(SHA1 `C9:2A:44:A5:...`, which Play refused), so the workflow now makes only the test APK unless the keystore secrets are set, and it stops
+if the bundle's key is not the expected one.
+
+1. Get the keystore the old Expo app was uploaded with. If it was managed by EAS: `npx eas-cli credentials -p android` → *production* →
+   *Keystore* → *Download existing keystore*. It gives you the `.jks` file, the keystore password, the key alias and the key password.
+   (Downloading credentials still works when the free build quota is used up.) Check it: `keytool -list -v -keystore file.jks` must show
+   the SHA1 above.
+2. Base64 it: `base64 -w0 file.jks` (macOS: `base64 -i file.jks`).
+3. In GitHub: Settings → Secrets and variables → Actions → add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+   `ANDROID_KEY_PASSWORD`. Run the **Build** workflow again; `educore.aab` is then signed with the right key.
+
+No old keystore? In Play Console → your app → *Test and release* → *App signing* → **Request upload key reset**. Create a new keystore
+(`keytool -genkeypair -v -storetype PKCS12 -keystore upload.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000`), upload its
+certificate when Play asks, wait for approval, and use that keystore for the four secrets. Keep the keystore and its passwords safe: they cannot be recovered.
+
 On your own computer: `flutter build apk --release --dart-define=ROOT_DOMAIN=edu-core.ng` (needs the Android SDK), and
 `flutter build appbundle --release ...` for Play. iOS needs a Mac: `flutter build ipa`.
 

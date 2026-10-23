@@ -86,6 +86,8 @@ String _queryString(Map<String, String?>? q) =>
 /// The full address of an API path (for downloads).
 String fileUrl(String path, [Map<String, String?>? query]) {
   final qs = _queryString(query);
+  // A link the school already signed (a lesson file) is used as it is.
+  if (path.startsWith('http')) return path;
   return '${baseUrl()}/api/$path${qs.isEmpty ? '' : '?$qs'}';
 }
 

@@ -3,6 +3,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/api.dart';
+import 'core/entitle.dart';
 import 'core/net.dart';
 import 'core/offline.dart';
 import 'core/storage.dart';
@@ -13,7 +14,9 @@ import 'features/push.dart';
 import 'features/termsheet.dart';
 import 'features/version.dart';
 import 'screens/account.dart';
+import 'screens/exams.dart';
 import 'screens/extras.dart';
+import 'screens/learning.dart';
 import 'screens/inbox.dart';
 import 'screens/login.dart';
 import 'screens/parent.dart';
@@ -61,6 +64,7 @@ List<MoreItem> _teacherMore(Session s) => _menu(s, [
       ('chat', MoreItem('meetings', 'Parent meetings', 'Offer times, see who booked', (_) => const TeacherMeetings())),
       ('students', MoreItem('help', 'Help', 'How things work', (_) => const HelpDocs())),
       ('homework', MoreItem('homework', 'Homework', 'Homework you set', (_) => const TeacherHomework())),
+      ('cbt.manual_grading', MoreItem('mark-exams', 'Mark exams', 'Written answers waiting for your marks', (_) => const TeacherMarking())),
       ('exams', MoreItem('class-results', 'Class results', 'Your class once the results are open', (_) => const TeacherClassResults())),
       ('leave', MoreItem('leave', 'Leave', 'Ask for leave and see decisions', (_) => const TeacherLeave())),
       ('payroll', MoreItem('payslips', 'Payslips', 'Your pay history', (_) => const TeacherPayslips())),
@@ -69,7 +73,8 @@ List<MoreItem> _teacherMore(Session s) => _menu(s, [
 
 List<MoreItem> _studentMore(Session s) => _menu(s, [
       ('homework', MoreItem('homework', 'Homework', 'What is due and when', (_) => const StudentHomework())),
-      ('online_tests', MoreItem('tests', 'Tests', 'Take a test or see your answers', (_) => const StudentTests())),
+      ('lms.enabled', MoreItem('learn', 'Learn', 'Courses, lessons and assignments', (_) => const StudentLearn())),
+      ('online_tests', MoreItem('tests', 'Tests and exams', 'Take a test or see your answers', (_) => const StudentTests())),
       ('school_calendar', MoreItem('calendar', 'School calendar', 'Term dates and events', (_) => const CalendarScreen())),
     ]);
 
@@ -141,6 +146,7 @@ class _EducoreAppState extends State<EducoreApp> {
 
   void _setSession(Session? s) {
     if (!mounted) return;
+    Ent.I.set(s);
     setState(() => _session = s);
     _lock.setSignedIn(s != null);
     if (s != null) {

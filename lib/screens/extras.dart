@@ -7,37 +7,11 @@ List _l(dynamic v) => (v as List?) ?? const [];
 
 void _fail(Object e, String title) => notify.err(title, e is ApiError ? e.message : null);
 
-/// The extra screens live behind one tab so the bottom bar stays readable. Each item is shown only when its feature is on.
+/// The extra screens live in the side menu so the bottom bar stays readable. Each item is shown only when its feature is on.
 class MoreItem {
   final String key, label, hint;
   final WidgetBuilder screen;
   const MoreItem(this.key, this.label, this.hint, this.screen);
-}
-
-class More extends StatefulWidget {
-  final List<MoreItem> items;
-  const More({super.key, required this.items});
-  @override
-  State<More> createState() => _MoreState();
-}
-
-class _MoreState extends State<More> {
-  String? _open;
-  @override
-  Widget build(BuildContext context) {
-    final item = widget.items.where((i) => i.key == _open).firstOrNull;
-    if (item != null) {
-      return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) { if (!didPop) setState(() => _open = null); },
-        child: WithBack(onBack: () => setState(() => _open = null), label: 'More', child: Builder(builder: item.screen)),
-      );
-    }
-    return Screen(children: [
-      const PageTitle('More', sub: 'Everything else your school offers.'),
-      ListGroup([for (final i in widget.items) ListRow(icon: iconFor(i.label), title: i.label, sub: i.hint, onPress: () => setState(() => _open = i.key))]),
-    ]);
-  }
 }
 
 /// A date as a small calendar leaf: the month on top, the day below. Falls back to an icon when the text is not a date.

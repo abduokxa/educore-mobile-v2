@@ -24,9 +24,11 @@ import 'screens/parent.dart';
 import 'screens/search.dart';
 import 'screens/student.dart';
 import 'screens/teacher.dart';
+import 'shell/drawer.dart';
 import 'shell/nav.dart';
 import 'shell/status.dart';
 import 'shell/tabbar.dart';
+import 'shell/unread.dart';
 import 'ui/ui.dart';
 
 const _modeKey = 'educore_mode';
@@ -56,7 +58,7 @@ List<Shortcut> _teacherShortcuts(Session s) => [
       if (_on(s, 'attendance')) const Shortcut('Mark the register', 'Register'),
       if (_on(s, 'exams')) const Shortcut('Enter scores', 'Scores'),
       const Shortcut('Notices', 'Notices'),
-      const Shortcut('More', 'More'),
+      const Shortcut('Profile', 'Account'),
     ];
 
 List<MoreItem> _teacherMore(Session s) => _menu(s, [
@@ -80,6 +82,8 @@ List<MoreItem> _studentMore(Session s) => _menu(s, [
       ('school_calendar', MoreItem('calendar', 'School calendar', 'Term dates and events', (_) => const CalendarScreen())),
     ]);
 
+List<MoreItem> _moreFor(Session s, String ws) => ws == 'parent' ? _parentMore(s) : ws == 'teacher' ? _teacherMore(s) : _studentMore(s);
+
 class EducoreApp extends StatefulWidget {
   const EducoreApp({super.key});
   @override
@@ -88,6 +92,7 @@ class EducoreApp extends StatefulWidget {
 
 class _EducoreAppState extends State<EducoreApp> {
   final ValueNotifier<int> _changed = ValueNotifier(0);
+  final _scaffold = GlobalKey<ScaffoldState>();
   bool _ready = false;
   Session? _session;
   Mode _mode = Mode.system;
@@ -181,11 +186,13 @@ class _EducoreAppState extends State<EducoreApp> {
       _links?.cancel();
       return;
     }
+    // Five at most in the bar, with Profile last. Notices have the bell at the top, and everything else is in the side menu.
     Nav.I.setTabs(switch (ws) {
-      'parent' => ['Home', if (_on(s, 'fees')) 'Fees', if (_on(s, 'exams')) 'Results', if (_on(s, 'attendance')) 'Attendance', 'Notices', if (_parentMore(s).isNotEmpty) 'More', 'Account'],
-      'teacher' => ['My day', if (_on(s, 'attendance')) 'Register', if (_on(s, 'exams')) 'Scores', 'Notices', if (_teacherMore(s).isNotEmpty) 'More', 'Account'],
-      _ => ['Today', if (_on(s, 'exams')) 'Results', 'Notices', if (_studentMore(s).isNotEmpty) 'More', 'Account'],
-    });
+      'parent' => ['Home', if (_on(s, 'fees')) 'Fees', if (_on(s, 'exams')) 'Results', if (_on(s, 'attendance')) 'Attendance', 'Notices', 'Account'],
+      'teacher' => ['My day', if (_on(s, 'attendance')) 'Register', if (_on(s, 'exams')) 'Scores', if (_feature(s, 'lms.enabled')) 'Learn', 'Notices', 'Account'],
+      _ => ['Today', if (_feature(s, 'lms.enabled')) 'Learn', if (_feature(s, 'online_tests')) 'Tests', if (_on(s, 'exams')) 'Results', 'Notices', 'Account'],
+    }, role: ws, pages: [for (final i in _moreFor(s, ws)) i.key]);
+    Unread.I.load();
     Terms.I.load();
     // The main screens of the role are loaded in the background as soon as the person is in, so the tabs open at once.
     warm(switch (ws) {
@@ -208,7 +215,7 @@ class _EducoreAppState extends State<EducoreApp> {
     if (notice != null) {
       Nav.I.go('Notices', notice: notice.group(1));
     } else {
-      Nav.I.go(href == null ? 'Notices' : tabFor(href));
+      Nav.I.goTo(href == null ? 'Notices' : targetFor(href));
     }
   }
 
@@ -292,13 +299,14 @@ class _EducoreAppState extends State<EducoreApp> {
     final s = _session;
     final ws = _ws;
     final school = s?['school'] as Map?;
+    final inRole = s != null && ws != null && const ['parent', 'teacher', 'student'].contains(ws);
     final chrome = ChromeData(
       school: school?['name'] as String?,
       logo: school?['has_logo'] == true ? '${baseUrl()}/api/school/logo' : null,
       brandColor: (school?['brand_color'] as String?) ?? _previewBrand,
       name: (s?['user'] as Map?)?['name'] as String?,
-      onAccount: () => Nav.I.go('Account'),
-      term: s != null && ws != null && const ['parent', 'teacher', 'student'].contains(ws) ? const TermChip() : null,
+      menu: inRole ? MenuButton(onOpen: () => _scaffold.currentState?.openDrawer()) : null,
+      bell: inRole ? const NoticeBell() : null,
       banner: s != null && ws != null ? const TermBanner() : null,
     );
     Widget body;
@@ -323,10 +331,16 @@ class _EducoreAppState extends State<EducoreApp> {
         AppButton('Sign out', kind: BtnKind.plain, icon: 'log-out-outline', onPressed: _signOut),
       ]);
     }
+    final role = switch (ws) { 'parent' => 'Parent', 'teacher' => 'Teacher', 'student' => 'Student', _ => '' };
     return Chrome(
       data: chrome,
-      child: Scaffold(
+      child: ListenableBuilder(listenable: Nav.I, builder: (context, _) => Scaffold(
+        key: _scaffold,
         resizeToAvoidBottomInset: true,
+        drawer: inRole
+            ? AppDrawer(school: school?['name'] as String? ?? 'Educore', person: (s['user'] as Map?)?['name'] as String? ?? '', roleLabel: role, logo: chrome.logo, brand: chrome.brandColor, more: _moreFor(s, ws))
+            : null,
+        drawerEnableOpenDragGesture: inRole && !Nav.I.locked,
         body: Stack(children: [
           Positioned.fill(child: body),
           if (_update.state == UpdateState.available)
@@ -334,7 +348,7 @@ class _EducoreAppState extends State<EducoreApp> {
           const ConnectivityBanner(),
           if (s != null && _lock.locked) Positioned.fill(child: LockScreen(onUnlock: _lock.unlock, onSignOut: _signOut, school: school?['name'] as String?)),
         ]),
-      ),
+      )),
     );
   }
 }
@@ -353,6 +367,26 @@ class _RoleShell extends StatefulWidget {
 
 class _RoleShellState extends State<_RoleShell> {
   final Set<String> _visited = {};
+  String _lastTab = '';
+
+  @override
+  void initState() {
+    super.initState();
+    Nav.I.addListener(_tabChanged);
+  }
+
+  @override
+  void dispose() {
+    Nav.I.removeListener(_tabChanged);
+    super.dispose();
+  }
+
+  /// The bell's count is read again each time a screen is left, and cleared on the notices themselves.
+  void _tabChanged() {
+    if (Nav.I.current == _lastTab) return;
+    _lastTab = Nav.I.current;
+    Nav.I.current == 'Notices' ? Unread.I.clear() : Unread.I.load();
+  }
 
   Widget _screen(String tab) {
     final s = widget.session;
@@ -367,7 +401,8 @@ class _RoleShellState extends State<_RoleShell> {
       case 'Register': return const TeacherRegister();
       case 'Scores': return const TeacherScores();
       case 'Today': return const StudentHome();
-      case 'More': return More(items: widget.ws == 'parent' ? _parentMore(s) : widget.ws == 'teacher' ? _teacherMore(s) : _studentMore(s));
+      case 'Learn': return widget.ws == 'teacher' ? const TeacherLearn() : const StudentLearn();
+      case 'Tests': return const StudentTests();
       case 'Account':
         return AccountScreen(name: '${(s['user'] as Map)['name']}', school: school?['name'] as String?, workspace: widget.ws, requests: _on(s, 'data_requests'), mode: widget.mode, onMode: widget.onMode, onSignOut: widget.onSignOut);
     }
@@ -381,6 +416,8 @@ class _RoleShellState extends State<_RoleShell> {
           final nav = Nav.I;
           if (nav.current.isNotEmpty) _visited.add(nav.current);
           final index = nav.tabs.indexOf(nav.current);
+          final menu = _moreFor(widget.session, widget.ws);
+          final page = nav.page == null ? null : menu.where((i) => i.key == nav.page).firstOrNull;
           return PopScope(
             canPop: nav.tabs.isEmpty || index <= 0 && !nav.canGoBack,
             onPopInvokedWithResult: (didPop, _) {
@@ -392,10 +429,23 @@ class _RoleShellState extends State<_RoleShell> {
                 child: MediaQuery.removePadding(
                   context: context,
                   removeBottom: true,
-                  child: IndexedStack(
-                    index: index < 0 ? 0 : index,
-                    children: [for (final t in nav.tabs) _visited.contains(t) ? KeyedSubtree(key: ValueKey(t), child: _screen(t)) : const SizedBox.shrink()],
-                  ),
+                  child: Stack(children: [
+                    Positioned.fill(
+                      child: IndexedStack(
+                        index: index < 0 ? 0 : index,
+                        children: [for (final t in nav.tabs) _visited.contains(t) ? KeyedSubtree(key: ValueKey(t), child: _screen(t)) : const SizedBox.shrink()],
+                      ),
+                    ),
+                    // A screen from the side menu sits over the tabs until Back is pressed.
+                    if (page != null)
+                      Positioned.fill(
+                        child: Container(
+                          key: ValueKey('page-${page.key}'),
+                          color: color.bg,
+                          child: WithBack(onBack: nav.back, label: 'Back', child: Builder(builder: page.screen)),
+                        ),
+                      ),
+                  ]),
                 ),
               ),
               const AppTabBar(),

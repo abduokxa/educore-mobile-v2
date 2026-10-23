@@ -89,10 +89,46 @@ void main() {
       expect(Nav.I.takeNotice(), isNull);
     });
 
-    test('maps the page a notice is about to a tab', () {
-      expect(tabFor('/parent/fees'), 'Fees');
-      expect(tabFor('/teacher/attendance'), 'Register');
-      expect(tabFor('/something/else'), 'More');
+    test('maps the page a notice is about to the screen that shows it', () {
+      expect(targetFor('/parent/fees'), 'Fees');
+      expect(targetFor('/teacher/attendance'), 'Register');
+      expect(targetFor('/student/learn/assignment'), 'Learn');
+      expect(targetFor('/teacher/payslips'), 'page:payslips');
+      expect(targetFor('/parent/messages?thread=3'), 'page:chat');
+      expect(targetFor('/something/else'), 'Notices');
+    });
+
+    test('Back goes to the screen before, a menu screen included, and a tab closes the screen over it', () {
+      final nav = Nav.I..setTabs(['Home', 'Fees', 'Notices', 'Account'], role: 'parent', pages: ['help', 'chat']);
+      nav.openPage('help');
+      nav.go('Fees');
+      expect(nav.page, isNull);
+      nav.go('Home');
+      nav.openPage('chat');
+      expect(nav.page, 'chat');
+      // Home, then Chat over it: back to Home, then Fees, then the Help that was open, then Home.
+      expect(nav.back(), isTrue);
+      expect(nav.page, isNull);
+      expect(nav.current, 'Home');
+      expect(nav.back(), isTrue);
+      expect(nav.current, 'Fees');
+      expect(nav.back(), isTrue);
+      expect(nav.page, 'help');
+      expect(nav.back(), isTrue);
+      expect(nav.page, isNull);
+      expect(nav.back(), isFalse);
+    });
+
+    test('a link opens its menu screen directly, and is ignored if this person has no such screen', () {
+      final nav = Nav.I..setTabs(['My day', 'Notices', 'Account'], role: 'teacher', pages: ['payslips']);
+      nav.goTo('page:payslips');
+      expect(nav.page, 'payslips');
+      nav.goTo('page:nothing');
+      expect(nav.page, 'payslips');
+      nav.lock(true);
+      nav.goTo('Notices');
+      expect(nav.current, 'My day');
+      nav.lock(false);
     });
   });
 

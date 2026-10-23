@@ -3,6 +3,10 @@ import 'package:flutter/widgets.dart';
 import 'package:ionicons/ionicons.dart';
 
 const Map<String, IconData> _ion = {
+  'menu-outline': Ionicons.menuOutline,
+  'book': Ionicons.book,
+  'document-text': Ionicons.documentText,
+  'person-circle': Ionicons.personCircle,
   'attach-outline': Ionicons.attachOutline,
   'document-attach-outline': Ionicons.documentAttachOutline,
   'folder-open-outline': Ionicons.folderOpenOutline,

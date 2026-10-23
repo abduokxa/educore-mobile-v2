@@ -5,37 +5,6 @@ import '../ui/ui.dart';
 /// "2026/2027" becomes "26/27", so the chip stays small.
 String shortSession(String s) => s.replaceFirstMapped(RegExp(r'(\d{2})(\d{2})/(\d{2})(\d{2})'), (m) => '${m[2]}/${m[4]}');
 
-/// The chip at the top of every screen: which term the app is showing. Tap it to choose another.
-class TermChip extends StatelessWidget {
-  const TermChip({super.key});
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Terms.I,
-        builder: (context, _) {
-          final t = Terms.I.shown;
-          if (t == null) return const SizedBox.shrink();
-          final past = t.past ? tone('amber') : null;
-          final fg = past?.fg ?? color.brand;
-          return Tap(
-            label: 'Showing ${t.row.label}. Tap to change the term.',
-            onTap: () => showAppSheet(context, title: 'Session and term', tall: true, builder: (_) => const TermSheet()),
-            child: Container(
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(color: past?.bg ?? color.tint, borderRadius: BorderRadius.circular(17)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icn('calendar-outline', size: 15, tint: fg),
-                const SizedBox(width: 5),
-                Text('${t.row.name.replaceAll(' Term', '')} · ${shortSession(t.session)}', style: Ty.custom(12.5, FontWeight.w700, c: fg)),
-                const SizedBox(width: 5),
-                Icn('chevron-down', size: 13, tint: fg),
-              ]),
-            ),
-          );
-        },
-      );
-}
-
 /// Shown on every screen while looking at a term that is not the current one, with a one-tap way back.
 class TermBanner extends StatelessWidget {
   const TermBanner({super.key});

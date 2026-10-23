@@ -7,13 +7,24 @@ import '../ui/ui.dart';
 List _l(dynamic v) => (v as List?) ?? const [];
 String _clip(String s, int n) => s.length > n ? s.substring(0, n) : s;
 
-/// The bottom tab a notice belongs to, from the page the server says it is about. Anything without its own tab opens the More menu.
-String tabFor(String href) {
+/// The screen a notice is about, from the page the server says it is: a tab, or a screen from the side menu written "page:key".
+/// A page this person has no screen for leaves them on their notices.
+String targetFor(String href) {
+  final path = href.split('?').first.replaceAll(RegExp(r'/+$'), '');
   const exact = {
-    '/teacher/attendance': 'Register', '/teacher/scores': 'Scores', '/teacher/class-results': 'Scores',
+    '/teacher/attendance': 'Register', '/teacher/scores': 'Scores', '/teacher/class-results': 'page:class-results',
     '/parent/fees': 'Fees', '/parent/results': 'Results', '/parent/attendance': 'Attendance', '/parent': 'Home', '/student': 'Today', '/teacher': 'My day',
+    '/student/results': 'Results', '/parent/notices': 'Notices', '/student/notices': 'Notices',
+    '/student/tests': 'Tests', '/teacher/tests': 'page:mark-exams',
+    '/parent/messages': 'page:chat', '/teacher/messages': 'page:chat', '/parent/meetings': 'page:meetings', '/teacher/meetings': 'page:meetings',
+    '/parent/homework': 'page:homework', '/student/homework': 'page:homework', '/teacher/homework': 'page:homework',
+    '/parent/calendar': 'page:calendar', '/student/calendar': 'page:calendar', '/teacher/calendar': 'page:calendar',
+    '/parent/transport': 'page:transport', '/parent/boarding': 'page:boarding', '/parent/notifications': 'page:notice-settings',
+    '/teacher/payslips': 'page:payslips', '/teacher/leave': 'page:leave',
   };
-  return exact[href] ?? 'More';
+  if (exact.containsKey(path)) return exact[path]!;
+  if (path.startsWith('/student/learn') || path.startsWith('/teacher/learning')) return 'Learn';
+  return 'Notices';
 }
 
 /// A parent answers a notice from the notice itself: it goes to the class teacher as a message, the same as starting one in Messages.
@@ -180,7 +191,7 @@ class _InboxState extends State<Inbox> {
                 onPress: () {
                   final href = i['href'] as String?;
                   if (href != null) {
-                    Nav.I.go(tabFor(href));
+                    Nav.I.goTo(targetFor(href));
                   } else {
                     setState(() => _open = _open == i['id'] ? null : '${i['id']}');
                   }

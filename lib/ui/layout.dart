@@ -5,15 +5,15 @@ import '../core/offline.dart';
 import '../core/theme.dart';
 import 'base.dart';
 
-/// What the top bar of every screen needs to know: the school, the person, and where "Account" lives.
+/// What the top bar of every screen needs to know: the school, the person, the menu button on the left and the notices bell on the right.
 class ChromeData {
   final String? school, logo, brandColor, name, backLabel;
-  final VoidCallback? onAccount, back;
-  final Widget? term, banner;
-  const ChromeData({this.school, this.logo, this.brandColor, this.name, this.onAccount, this.back, this.backLabel, this.term, this.banner});
+  final VoidCallback? back;
+  final Widget? menu, bell, banner;
+  const ChromeData({this.school, this.logo, this.brandColor, this.name, this.back, this.backLabel, this.menu, this.bell, this.banner});
 
   ChromeData withBack(VoidCallback back, String label) =>
-      ChromeData(school: school, logo: logo, brandColor: brandColor, name: name, onAccount: onAccount, back: back, backLabel: label, term: term, banner: banner);
+      ChromeData(school: school, logo: logo, brandColor: brandColor, name: name, back: back, backLabel: label, menu: menu, bell: bell, banner: banner);
 }
 
 class Chrome extends InheritedWidget {
@@ -124,7 +124,7 @@ class _OfflineBannerState extends State<OfflineBanner> {
   }
 }
 
-/// The quiet bar at the top of every screen: where you are, and your account.
+/// The quiet bar at the top of every screen: the menu button and the school on the left, the notices bell on the right.
 class TopBar extends StatelessWidget {
   const TopBar({super.key});
   @override
@@ -149,18 +149,13 @@ class TopBar extends StatelessWidget {
         else
           Flexible(
             child: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (c.menu != null) ...[c.menu!, const SizedBox(width: 6)],
               SchoolLogo(uri: c.logo, name: c.school ?? 'Educore', tint: c.brandColor, size: 34),
               const SizedBox(width: 10),
               Flexible(child: Text(c.school ?? 'Educore', maxLines: 1, overflow: TextOverflow.ellipsis, style: Ty.h3())),
             ]),
           ),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          if (c.term != null) c.term!,
-          if (c.name != null) ...[
-            const SizedBox(width: 10),
-            Tap(label: 'Your account', onTap: c.onAccount, child: Avatar(c.name!, size: 36, solid: true)),
-          ],
-        ]),
+        if (c.bell != null) c.bell!,
       ]),
     );
   }

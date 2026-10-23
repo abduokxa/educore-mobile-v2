@@ -1,6 +1,7 @@
 import 'package:educore/core/api.dart';
 import 'package:educore/core/term.dart';
 import 'package:educore/core/theme.dart';
+import 'package:educore/core/words.dart';
 import 'package:educore/features/version.dart';
 import 'package:educore/screens/forgot.dart';
 import 'package:educore/screens/inbox.dart';
@@ -115,6 +116,30 @@ void main() {
     test('has nothing to show before the school answers', () {
       Terms.I.reset();
       expect(Terms.I.shown, isNull);
+    });
+  });
+
+  group('words for learning and exams', () {
+    test('tokens are filled with the school\'s words, capital and plural included', () {
+      Words.set({'school': {'words': {'course': ['learning area', 'learning areas'], 'lesson': ['activity', 'activities'], 'test': ['quiz', 'quizzes']}}});
+      expect(w('New {course}'), 'New learning area');
+      expect(w('{Courses} and {lessons}'), 'Learning areas and activities');
+      expect(w('Leave the {test}?'), 'Leave the quiz?');
+      expect(w('{unknown} stays'), '{unknown} stays');
+      Words.set(null);
+      expect(w('{course}'), 'e-class');
+    });
+  });
+
+  group('a test being taken', () {
+    test('locks the tabs until it is over', () {
+      Nav.I.setTabs(['Today', 'Results', 'More']);
+      Nav.I.lock(true);
+      Nav.I.go('Results');
+      expect(Nav.I.current, 'Today');
+      Nav.I.lock(false);
+      Nav.I.go('Results');
+      expect(Nav.I.current, 'Results');
     });
   });
 }

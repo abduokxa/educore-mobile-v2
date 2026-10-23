@@ -4,6 +4,7 @@ import '../core/api.dart';
 import '../core/entitle.dart';
 import '../core/words.dart';
 import '../features/gate.dart';
+import '../shell/nav.dart';
 import '../ui/ui.dart';
 
 List _l(dynamic v) => (v as List?) ?? const [];
@@ -23,26 +24,9 @@ class StudentTests extends StatefulWidget {
 class _StudentTestsState extends State<StudentTests> {
   dynamic _taking, _review, _intro;
 
-  Future<bool> _leave() => confirm(context, title: w('Leave the {test}?'), message: 'Your answers so far are saved and the time keeps running. You can come back and continue.', yes: 'Leave', no: 'Stay', destructive: true);
-
   @override
   Widget build(BuildContext context) {
-    if (_taking != null) {
-      return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) async {
-          if (didPop) return;
-          if (await _leave()) setState(() => _taking = null);
-        },
-        child: WithBack(
-          onBack: () async {
-            if (await _leave()) setState(() => _taking = null);
-          },
-          label: w('{Tests}'),
-          child: _TakeTest(test: _taking, onDone: () => setState(() => _taking = null)),
-        ),
-      );
-    }
+    if (_taking != null) return _TakeTest(test: _taking, onDone: () => setState(() => _taking = null));
     if (_review != null) return WithBack(onBack: () => setState(() => _review = null), label: w('{Tests}'), child: _Review(data: _review));
     if (_intro != null) {
       return WithBack(
@@ -53,7 +37,13 @@ class _StudentTestsState extends State<StudentTests> {
           ECard(children: [
             Text('${_intro['questions']} questions${_intro['timed'] == true ? ', ${_intro['minutes']} minutes' : ''}.', style: Ty.h3()),
             Text(_intro['timed'] == true ? 'The clock starts when you press Start and cannot be paused.' : w('Hand in before the {exam} closes.'), style: Ty.body()),
-            Text(w('You can take this {exam} once. Your answers are saved as you go, so if your connection drops you can continue. When time is up, what you have answered is handed in for you.'), style: Ty.body()),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: tone('amber').bg, borderRadius: BorderRadius.circular(14)),
+              child: Text(w('Stay on this screen. If you go to another app, press back, lock the phone or lose your connection for more than a few seconds, the {test} ends and what you have answered is handed in.'), style: Ty.body(c: tone('amber').fg, w: FontWeight.w700)),
+            ),
+            Text(w('You can take this {test} once. Put your phone on silent so a call does not take you away.'), style: Ty.body()),
             if ((_intro['instructions'] as String?)?.isNotEmpty == true) Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color.tint, borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('From your teacher', style: Ty.small(w: FontWeight.w800)), const SizedBox(height: 4), Text('${_intro['instructions']}', style: Ty.body())])),
           ]),
           AppButton(w('Start the {exam}'), icon: 'play', onPressed: () async {
@@ -96,6 +86,7 @@ class _StudentTestsState extends State<StudentTests> {
               LR(
                 left: Wrap(spacing: 6, runSpacing: 6, children: [
                   Pill(_stateInfo['${t['state']}']?.$1 ?? '${t['state']}', toneName: _stateInfo['${t['state']}']?.$2 ?? 'grey'),
+                  if (t['ended_by'] == 'left') const Pill('You left, so it was handed in', toneName: 'amber'),
                   if (t['result'] == 'marking') const Pill('Being marked', toneName: 'amber'),
                   if (t['result'] == 'held') const Pill('Result not released yet', toneName: 'amber'),
                   if (t['result'] == 'shown' && t['passed'] != null) Pill(t['passed'] == true ? 'Passed' : 'Below pass mark', toneName: t['passed'] == true ? 'green' : 'red'),
@@ -104,11 +95,7 @@ class _StudentTestsState extends State<StudentTests> {
               ),
               if (t['state'] == 'open' || t['state'] == 'resume')
                 AppButton(t['state'] == 'resume' ? 'Continue' : 'Start', icon: 'play', onPressed: () {
-                  if (t['state'] == 'open' && t['kind'] == 'exam') {
-                    setState(() => _intro = t);
-                  } else {
-                    _begin('${t['id']}');
-                  }
+                  setState(() => _intro = t);
                 }),
               if (t['can_review'] == true) AppButton('See the answers', kind: BtnKind.soft, icon: 'eye-outline', onPressed: () => look('${t['id']}')),
             ]),
@@ -127,7 +114,9 @@ class _StudentTestsState extends State<StudentTests> {
   }
 }
 
-/// One attempt. The school keeps the real clock; this one is only a guide. Answers are kept safe on the server every few seconds.
+/// One attempt, taken without leaving it. There is no tab bar and no menu; going out of the app, pressing back or locking the phone
+/// ends the {test} and hands in what was answered. The school keeps the real clock, and notices by itself if this screen stops
+/// reporting (the app is closed, the phone dies), so that ends it too.
 class _TakeTest extends StatefulWidget {
   final dynamic test;
   final VoidCallback onDone;
@@ -136,19 +125,23 @@ class _TakeTest extends StatefulWidget {
   State<_TakeTest> createState() => _TakeTestState();
 }
 
-class _TakeTestState extends State<_TakeTest> {
+class _TakeTestState extends State<_TakeTest> with WidgetsBindingObserver {
   late int _left = (widget.test['seconds_left'] as num).toInt();
   late final bool _timed = widget.test['timed'] != false;
   final Map<String, dynamic> _answers = {};
   final Map<String, TextEditingController> _text = {};
-  bool _busy = false, _sent = false, _dirty = false;
-  String _saved = '';
+  bool _busy = false, _over = false, _left_ = false, _dirty = false, _offline = false;
+  int _at = 0;
   late final StreamSubscription<int> _tick;
-  Timer? _saver;
+  Timer? _saver, _away;
+
+  String get _id => '${widget.test['id']}';
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    Nav.I.lock(true);
     final saved = widget.test['saved'];
     if (saved is Map) {
       saved.forEach((k, v) {
@@ -157,44 +150,83 @@ class _TakeTestState extends State<_TakeTest> {
       });
     }
     _tick = Stream<int>.periodic(const Duration(seconds: 1), (i) => i).listen((_) {
-      if (!mounted) return;
+      if (!mounted || _over) return;
       setState(() => _left--);
       if (_timed && _left <= 0) _submit();
     });
-    _saver = Timer.periodic(const Duration(seconds: 6), (_) => _save());
+    _saver = Timer.periodic(const Duration(seconds: 5), (_) => _beat());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    Nav.I.lock(false);
     _tick.cancel();
     _saver?.cancel();
+    _away?.cancel();
     for (final c in _text.values) {
       c.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _save() async {
-    if (!_dirty || _sent) return;
-    _dirty = false;
-    try {
-      await api('student/tests/${widget.test['id']}/save', method: 'PUT', body: {'answers': _answers});
-      if (mounted) setState(() => _saved = 'saved');
-    } catch (_) {
-      _dirty = true;
-      if (mounted) setState(() => _saved = 'offline');
+  /// Going to another app, the home screen or a locked phone ends it. A pulled-down shade gets a few seconds' grace.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_over) return;
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        _leave();
+      case AppLifecycleState.inactive:
+        _away?.cancel();
+        _away = Timer(const Duration(seconds: 3), _leave);
+      case AppLifecycleState.resumed:
+        _away?.cancel();
     }
   }
 
+  /// Tells the school the student is still here, and keeps the answers safe.
+  Future<void> _beat() async {
+    if (_over) return;
+    final send = _dirty;
+    _dirty = false;
+    try {
+      await api('student/tests/$_id/save', method: 'PUT', body: send ? {'answers': _answers} : {});
+      if (mounted && _offline) setState(() => _offline = false);
+    } catch (e) {
+      if (send) _dirty = true;
+      if (e is ApiError && e.status == 422 && mounted) {
+        setState(() {
+          _over = true;
+          _left_ = true;
+        });
+        return;
+      }
+      if (mounted && !_offline) setState(() => _offline = true);
+    }
+  }
+
+  /// The student went out of the {test}: it is handed in as it stands.
+  Future<void> _leave() async {
+    if (_over) return;
+    _over = true;
+    _away?.cancel();
+    if (mounted) setState(() => _left_ = true);
+    try {
+      await api('student/tests/$_id/leave', method: 'POST', body: {'answers': _answers});
+    } catch (_) {/* the school hands it in by itself a few seconds later */}
+  }
+
   Future<void> _submit() async {
-    if (_sent) return;
-    _sent = true;
+    if (_over || _busy) return;
     setState(() => _busy = true);
     try {
-      final r = await api('student/tests/${widget.test['id']}/submit', method: 'POST', body: {'answers': _answers});
+      final r = await api('student/tests/$_id/submit', method: 'POST', body: {'answers': _answers});
+      _over = true;
       notify.ok('Submitted', '${r['message']}');
     } catch (e) {
-      _sent = false;
       _fail(e, 'Could not submit');
       if (mounted) setState(() => _busy = false);
       return;
@@ -202,49 +234,106 @@ class _TakeTestState extends State<_TakeTest> {
     widget.onDone();
   }
 
+  Future<void> _tryLeave() async {
+    if (_over) return;
+    if (await confirm(context, title: w('Leave the {test}?'), message: w('Leaving ends the {test} now and hands in what you have answered. You cannot open it again.'), yes: 'Leave and hand in', no: 'Stay', destructive: true)) {
+      await _leave();
+    }
+  }
+
   bool _has(String id) => _answers[id] != null && '${_answers[id]}'.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
+    if (_left_) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) widget.onDone();
+        },
+        child: Screen(bare: true, children: [
+          const SizedBox(height: 60),
+          const Empty(icon: 'lock-closed-outline', title: 'You left', body: ''),
+          Text(w('You left the {test}, so it was handed in with what you had answered. It cannot be opened again, and your teacher can see this.'), textAlign: TextAlign.center, style: Ty.body()),
+          AppButton(w('Back to your {tests}'), icon: 'arrow-back', onPressed: widget.onDone),
+        ]),
+      );
+    }
     final qs = _l(widget.test['questions']);
     final answered = qs.where((q) => _has('${q['id']}')).length;
     final mm = (_left < 0 ? 0 : _left) ~/ 60, ss = (_left < 0 ? 0 : _left) % 60;
-    return Screen(
-      footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Bar(qs.isNotEmpty ? answered / qs.length * 100 : 0, height: 6),
-        const SizedBox(height: 8),
-        AppButton('Submit ($answered of ${qs.length} answered)', icon: 'checkmark-done', busy: _busy, onPressed: _submit),
-      ]),
-      children: [
-        PageTitle('${widget.test['title']}'),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          if (_timed) Pill('Time left $mm:${ss.toString().padLeft(2, '0')}', toneName: _left < 60 ? 'red' : 'amber'),
-          if (_saved == 'saved') const Pill('Saved', toneName: 'green'),
-          if (_saved == 'offline') const Pill('Not saved: check your connection', toneName: 'red'),
+    final q = qs[_at];
+    final id = '${q['id']}';
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _tryLeave();
+      },
+      child: Screen(
+        bare: true,
+        footer: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Bar(qs.isNotEmpty ? answered / qs.length * 100 : 0, height: 6),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: AppButton('Previous', icon: 'chevron-back', kind: BtnKind.plain, disabled: _at == 0, onPressed: () => setState(() => _at--))),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: _at < qs.length - 1 ? AppButton('Next question', icon: 'chevron-forward', onPressed: () => setState(() => _at++)) : AppButton('Submit ($answered of ${qs.length})', icon: 'checkmark-done', busy: _busy, onPressed: _submit),
+            ),
+          ]),
         ]),
-        for (var n = 0; n < qs.length; n++)
-          ECard(children: [
-            Text('${n + 1}. ${qs[n]['body']}', style: Ty.h3()),
-            if (qs[n]['type'] == 'theory')
+        children: [
+          Row(children: [
+            Expanded(child: Text('${widget.test['title']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: Ty.h3())),
+            if (_timed) Pill('$mm:${ss.toString().padLeft(2, '0')}', toneName: _left < 60 ? 'red' : 'amber'),
+          ]),
+          if (_offline) const Pill('Not saved: check your connection', toneName: 'red'),
+          SizedBox(
+            height: 40,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: qs.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
+              itemBuilder: (context, i) {
+                final done = _has('${qs[i]['id']}');
+                final here = i == _at;
+                return Tap(
+                  scale: 0.92,
+                  label: 'Question ${i + 1}',
+                  onTap: () => setState(() => _at = i),
+                  child: Container(
+                    width: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: done ? color.tint : color.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: here ? color.brand : color.line, width: here ? 2 : 1.2)),
+                    child: Text('${i + 1}', style: Ty.custom(13, FontWeight.w800, c: done ? color.brand : color.muted)),
+                  ),
+                );
+              },
+            ),
+          ),
+          ECard(title: 'Question ${_at + 1} of ${qs.length}', right: Muted('${q['marks']} mark${q['marks'] == 1 ? '' : 's'}'), children: [
+            Text('${q['body']}', style: Ty.h3()),
+            if (q['type'] == 'theory')
               Field(
                 label: 'Your answer',
-                controller: _text.putIfAbsent('${qs[n]['id']}', () => TextEditingController()),
+                controller: _text.putIfAbsent(id, () => TextEditingController()),
                 multiline: true,
-                rows: 6,
+                rows: 8,
                 onChanged: (v) => setState(() {
-                  _answers['${qs[n]['id']}'] = v;
+                  _answers[id] = v;
                   _dirty = true;
                 }),
               )
             else
-              for (var i = 0; i < _l(qs[n]['options']).length; i++)
+              for (var i = 0; i < _l(q['options']).length; i++)
                 Builder(builder: (context) {
-                  final on = _answers['${qs[n]['id']}'] == i;
+                  final on = _answers[id] == i;
                   return Tap(
                     scale: 0.985,
                     label: 'Option ${String.fromCharCode(65 + i)}',
                     onTap: () => setState(() {
-                      _answers['${qs[n]['id']}'] = i;
+                      _answers[id] = i;
                       _dirty = true;
                     }),
                     child: Container(
@@ -253,13 +342,14 @@ class _TakeTestState extends State<_TakeTest> {
                       child: Row(children: [
                         Container(width: 28, height: 28, decoration: BoxDecoration(color: on ? color.brand : color.bg, shape: BoxShape.circle), alignment: Alignment.center, child: Text(String.fromCharCode(65 + i), style: Ty.custom(13, FontWeight.w800, c: on ? color.onBrand : color.muted))),
                         const SizedBox(width: 12),
-                        Expanded(child: Text('${_l(qs[n]['options'])[i]}', style: Ty.body())),
+                        Expanded(child: Text('${_l(q['options'])[i]}', style: Ty.body())),
                       ]),
                     ),
                   );
                 }),
           ]),
-      ],
+        ],
+      ),
     );
   }
 }

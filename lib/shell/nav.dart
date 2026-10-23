@@ -9,6 +9,15 @@ class Nav extends ChangeNotifier {
   String current = '';
   final List<String> _history = [];
 
+  /// While a test or exam is being taken, nothing else in the app can be opened: no tabs, no shortcuts, no notice taps.
+  bool locked = false;
+
+  void lock(bool on) {
+    if (locked == on) return;
+    locked = on;
+    notifyListeners();
+  }
+
   /// A notice a tap (or a link in an email) asked to open; the Notices screen takes it.
   String? openNotice;
 
@@ -21,7 +30,7 @@ class Nav extends ChangeNotifier {
   }
 
   void go(String tab, {String? notice}) {
-    if (!tabs.contains(tab)) return;
+    if (locked || !tabs.contains(tab)) return;
     openNotice = notice;
     if (tab != current) {
       _history.add(current);

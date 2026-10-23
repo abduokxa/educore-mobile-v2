@@ -89,6 +89,7 @@ class _AppTabBarState extends State<AppTabBar> {
         listenable: Nav.I,
         builder: (context, _) {
           final nav = Nav.I;
+          if (nav.locked) return const SizedBox.shrink();
           if (_lastFor != nav.current) {
             _lastFor = nav.current;
             WidgetsBinding.instance.addPostFrameCallback((_) => _loadUnread());

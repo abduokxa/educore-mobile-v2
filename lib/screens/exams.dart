@@ -141,7 +141,7 @@ class _TakeTestState extends State<_TakeTest> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Nav.I.lock(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) Nav.I.lock(true); });
     final saved = widget.test['saved'];
     if (saved is Map) {
       saved.forEach((k, v) {
@@ -243,6 +243,67 @@ class _TakeTestState extends State<_TakeTest> with WidgetsBindingObserver {
 
   bool _has(String id) => _answers[id] != null && '${_answers[id]}'.trim().isNotEmpty;
 
+  /// The final hand-in: always asks first, and says how many questions are still not answered.
+  Future<void> _finish(int total, int answered) async {
+    if (_over || _busy) return;
+    final left = total - answered;
+    final msg = left == 0 ? 'You have answered all $total questions.' : 'You have answered $answered of $total questions. $left ${left == 1 ? 'is' : 'are'} not answered.';
+    final ok = await confirm(context, title: w('Hand in your {test}?'), message: '$msg ${w('Once you hand in, you cannot change your answers or open this {test} again.')}', yes: 'Yes, hand in', no: 'Keep going');
+    if (ok && mounted) await _submit();
+  }
+
+  /// A small panel with every question number: filled for answered, outlined for not answered. Tapping one goes to it.
+  Future<void> _showQuestions(List qs) {
+    return showAppSheet<void>(
+      context,
+      title: 'Your questions',
+      builder: (ctx) {
+        final answered = qs.where((q) => _has('${q['id']}')).length;
+        return ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(20, 4, 20, 24), children: [
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            for (var i = 0; i < qs.length; i++)
+              Tap(
+                scale: 0.92,
+                label: 'Question ${i + 1}, ${_has('${qs[i]['id']}') ? 'answered' : 'not answered'}',
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  setState(() => _at = i);
+                },
+                child: Container(
+                  width: 46,
+                  height: 46,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _has('${qs[i]['id']}') ? color.brand : color.card,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: i == _at ? color.brand : (_has('${qs[i]['id']}') ? color.brand : color.line), width: i == _at ? 3 : 1.5),
+                  ),
+                  child: Text('${i + 1}', style: Ty.custom(15, FontWeight.w800, c: _has('${qs[i]['id']}') ? color.onBrand : color.muted)),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 16),
+          Row(children: [
+            Container(width: 16, height: 16, decoration: BoxDecoration(color: color.brand, borderRadius: BorderRadius.circular(5))),
+            const SizedBox(width: 8),
+            Text('Answered ($answered)', style: Ty.body()),
+            const SizedBox(width: 20),
+            Container(width: 16, height: 16, decoration: BoxDecoration(color: color.card, borderRadius: BorderRadius.circular(5), border: Border.all(color: color.line, width: 1.5))),
+            const SizedBox(width: 8),
+            Text('Not answered (${qs.length - answered})', style: Ty.body()),
+          ]),
+          const SizedBox(height: 8),
+          Text('Tap a number to go to that question. The clock keeps running.', style: Ty.body(c: color.muted)),
+          const SizedBox(height: 16),
+          AppButton('Final submit', icon: 'checkmark-done', onPressed: () {
+            Navigator.of(ctx).pop();
+            _finish(qs.length, answered);
+          }),
+        ]);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_left_) {
@@ -278,8 +339,7 @@ class _TakeTestState extends State<_TakeTest> with WidgetsBindingObserver {
             Expanded(child: AppButton('Previous', icon: 'chevron-back', kind: BtnKind.plain, disabled: _at == 0, onPressed: () => setState(() => _at--))),
             const SizedBox(width: 10),
             Expanded(
-              flex: 2,
-              child: _at < qs.length - 1 ? AppButton('Next question', icon: 'chevron-forward', onPressed: () => setState(() => _at++)) : AppButton('Submit ($answered of ${qs.length})', icon: 'checkmark-done', busy: _busy, onPressed: _submit),
+              child: _at < qs.length - 1 ? AppButton('Next question', icon: 'chevron-forward', onPressed: () => setState(() => _at++)) : AppButton('Final submit', icon: 'checkmark-done', busy: _busy, onPressed: () => _finish(qs.length, answered)),
             ),
           ]),
         ]),
@@ -289,29 +349,24 @@ class _TakeTestState extends State<_TakeTest> with WidgetsBindingObserver {
             if (_timed) Pill('$mm:${ss.toString().padLeft(2, '0')}', toneName: _left < 60 ? 'red' : 'amber'),
           ]),
           if (_offline) const Pill('Not saved: check your connection', toneName: 'red'),
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: qs.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 6),
-              itemBuilder: (context, i) {
-                final done = _has('${qs[i]['id']}');
-                final here = i == _at;
-                return Tap(
-                  scale: 0.92,
-                  label: 'Question ${i + 1}',
-                  onTap: () => setState(() => _at = i),
-                  child: Container(
-                    width: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: done ? color.tint : color.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: here ? color.brand : color.line, width: here ? 2 : 1.2)),
-                    child: Text('${i + 1}', style: Ty.custom(13, FontWeight.w800, c: done ? color.brand : color.muted)),
-                  ),
-                );
-              },
+          Row(children: [
+            Tap(
+              scale: 0.96,
+              label: 'Show all questions',
+              onTap: () => _showQuestions(qs),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(color: color.card, borderRadius: BorderRadius.circular(999), border: Border.all(color: color.line, width: 1.5)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icn('grid-outline', size: 16, tint: color.brand),
+                  const SizedBox(width: 8),
+                  Text('Questions ${_at + 1}/${qs.length}', style: Ty.custom(13, FontWeight.w800, c: color.brand)),
+                ]),
+              ),
             ),
-          ),
+            const Spacer(),
+            Text('$answered answered · ${qs.length - answered} not answered', style: Ty.custom(12, FontWeight.w600, c: color.muted)),
+          ]),
           ECard(title: 'Question ${_at + 1} of ${qs.length}', right: Muted('${q['marks']} mark${q['marks'] == 1 ? '' : 's'}'), children: [
             Text('${q['body']}', style: Ty.h3()),
             if (q['type'] == 'theory')

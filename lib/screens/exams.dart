@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/entitle.dart';
+import '../core/words.dart';
 import '../features/gate.dart';
 import '../ui/ui.dart';
 
@@ -22,7 +23,7 @@ class StudentTests extends StatefulWidget {
 class _StudentTestsState extends State<StudentTests> {
   dynamic _taking, _review, _intro;
 
-  Future<bool> _leave() => confirm(context, title: 'Leave the test?', message: 'Your answers so far are saved and the time keeps running. You can come back and continue.', yes: 'Leave', no: 'Stay', destructive: true);
+  Future<bool> _leave() => confirm(context, title: w('Leave the {test}?'), message: 'Your answers so far are saved and the time keeps running. You can come back and continue.', yes: 'Leave', no: 'Stay', destructive: true);
 
   @override
   Widget build(BuildContext context) {
@@ -37,25 +38,25 @@ class _StudentTestsState extends State<StudentTests> {
           onBack: () async {
             if (await _leave()) setState(() => _taking = null);
           },
-          label: 'Tests',
+          label: w('{Tests}'),
           child: _TakeTest(test: _taking, onDone: () => setState(() => _taking = null)),
         ),
       );
     }
-    if (_review != null) return WithBack(onBack: () => setState(() => _review = null), label: 'Tests', child: _Review(data: _review));
+    if (_review != null) return WithBack(onBack: () => setState(() => _review = null), label: w('{Tests}'), child: _Review(data: _review));
     if (_intro != null) {
       return WithBack(
         onBack: () => setState(() => _intro = null),
-        label: 'Tests',
+        label: w('{Tests}'),
         child: Screen(children: [
           PageTitle('${_intro['title']}', sub: '${_intro['subject'] ?? ''} · before you start'),
           ECard(children: [
             Text('${_intro['questions']} questions${_intro['timed'] == true ? ', ${_intro['minutes']} minutes' : ''}.', style: Ty.h3()),
-            Text(_intro['timed'] == true ? 'The clock starts when you press Start and cannot be paused.' : 'Hand in before the exam closes.', style: Ty.body()),
-            Text('You can take this exam once. Your answers are saved as you go, so if your connection drops you can continue. When time is up, what you have answered is handed in for you.', style: Ty.body()),
+            Text(_intro['timed'] == true ? 'The clock starts when you press Start and cannot be paused.' : w('Hand in before the {exam} closes.'), style: Ty.body()),
+            Text(w('You can take this {exam} once. Your answers are saved as you go, so if your connection drops you can continue. When time is up, what you have answered is handed in for you.'), style: Ty.body()),
             if ((_intro['instructions'] as String?)?.isNotEmpty == true) Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color.tint, borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('From your teacher', style: Ty.small(w: FontWeight.w800)), const SizedBox(height: 4), Text('${_intro['instructions']}', style: Ty.body())])),
           ]),
-          AppButton('Start the exam', icon: 'play', onPressed: () async {
+          AppButton(w('Start the {exam}'), icon: 'play', onPressed: () async {
             final id = '${_intro['id']}';
             setState(() => _intro = null);
             await _begin(id);
@@ -76,7 +77,7 @@ class _StudentTestsState extends State<StudentTests> {
         }
 
         return Screen(onRefresh: reload, children: [
-          PageTitle(Ent.I.on('cbt.enabled') ? 'Tests and exams' : 'Tests', sub: 'Take a test when it is open, and see your answers after.'),
+          PageTitle(Ent.I.on('cbt.enabled') ? w('{Tests} and {exams}') : w('{Tests}'), sub: w('Take a {test} when it is open, and see your answers after.')),
           if (_l(d['rows']).isEmpty) const Empty(icon: 'document-text-outline', title: 'Nothing for your class yet', body: 'They appear here when a teacher sets one.'),
           for (final t in _l(d['rows']))
             ECard(children: [
@@ -90,7 +91,7 @@ class _StudentTestsState extends State<StudentTests> {
                     Muted([t['subject'], '${t['questions']} questions', if (t['timed'] != false) '${t['minutes']} minutes', if (t['state'] == 'soon' && t['opens'] != null) 'opens ${t['opens']}' else if (t['closes'] != null) 'closes ${t['closes']}'].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
                   ]),
                 ),
-                if (t['kind'] == 'exam') const Pill('Exam', toneName: 'blue'),
+                if (t['kind'] == 'exam') Pill(w('{Exam}'), toneName: 'blue'),
               ]),
               LR(
                 left: Wrap(spacing: 6, runSpacing: 6, children: [
@@ -121,7 +122,7 @@ class _StudentTestsState extends State<StudentTests> {
       final r = await api('student/tests/$id/start', method: 'POST');
       if (mounted) setState(() => _taking = {'id': id, ...Map<String, dynamic>.from(r as Map)});
     } catch (e) {
-      _fail(e, 'Could not start the test');
+      _fail(e, w('Could not start the {test}'));
     }
   }
 }
@@ -318,7 +319,7 @@ class _TeacherMarkingState extends State<TeacherMarking> {
 
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('cbt.manual_grading')) return const LockedView(title: 'Mark exams', feature: 'cbt.manual_grading');
+    if (!Ent.I.on('cbt.manual_grading')) return LockedView(title: w('Mark {exams}'), feature: 'cbt.manual_grading');
     if (_attempt != null) {
       return WithBack(
         onBack: () => setState(() {
@@ -335,7 +336,7 @@ class _TeacherMarkingState extends State<TeacherMarking> {
           _exam = null;
           _bump++;
         }),
-        label: 'Exams',
+        label: w('{Exams}'),
         child: LoadView(
           key: ValueKey('a${_exam['id']}$_bump'),
           path: 'teacher/tests/${_exam['id']}/attempts',
@@ -363,8 +364,8 @@ class _TeacherMarkingState extends State<TeacherMarking> {
       builder: (context, d, reload) {
         final rows = _l(d['data']).where((t) => (t['taken'] ?? 0) > 0).toList();
         return Screen(onRefresh: reload, children: [
-          const PageTitle('Mark exams', sub: 'Exams that students have handed in.'),
-          if (rows.isEmpty) const Empty(icon: 'create-outline', title: 'Nothing to mark', body: 'Exams appear here once students hand in.'),
+          PageTitle(w('Mark {exams}'), sub: w('{Exams} that students have handed in.')),
+          if (rows.isEmpty) Empty(icon: 'create-outline', title: 'Nothing to mark', body: w('{Exams} appear here once students hand in.')),
           ListGroup([
             for (final t in rows)
               ListRow(

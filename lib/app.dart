@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/api.dart';
 import 'core/entitle.dart';
+import 'core/words.dart';
 import 'core/net.dart';
 import 'core/offline.dart';
 import 'core/storage.dart';
@@ -64,8 +65,8 @@ List<MoreItem> _teacherMore(Session s) => _menu(s, [
       ('chat', MoreItem('meetings', 'Parent meetings', 'Offer times, see who booked', (_) => const TeacherMeetings())),
       ('students', MoreItem('help', 'Help', 'How things work', (_) => const HelpDocs())),
       ('homework', MoreItem('homework', 'Homework', 'Homework you set', (_) => const TeacherHomework())),
-      ('lms.enabled', MoreItem('learn', 'Learning', 'Your courses and assignments to mark', (_) => const TeacherLearn())),
-      ('cbt.manual_grading', MoreItem('mark-exams', 'Mark exams', 'Written answers waiting for your marks', (_) => const TeacherMarking())),
+      ('lms.enabled', MoreItem('learn', w('{Learning}'), w('Your {courses} and {assignments} to mark'), (_) => const TeacherLearn())),
+      ('cbt.manual_grading', MoreItem('mark-exams', w('Mark {exams}'), 'Written answers waiting for your marks', (_) => const TeacherMarking())),
       ('exams', MoreItem('class-results', 'Class results', 'Your class once the results are open', (_) => const TeacherClassResults())),
       ('leave', MoreItem('leave', 'Leave', 'Ask for leave and see decisions', (_) => const TeacherLeave())),
       ('payroll', MoreItem('payslips', 'Payslips', 'Your pay history', (_) => const TeacherPayslips())),
@@ -74,8 +75,8 @@ List<MoreItem> _teacherMore(Session s) => _menu(s, [
 
 List<MoreItem> _studentMore(Session s) => _menu(s, [
       ('homework', MoreItem('homework', 'Homework', 'What is due and when', (_) => const StudentHomework())),
-      ('lms.enabled', MoreItem('learn', 'Learn', 'Courses, lessons and assignments', (_) => const StudentLearn())),
-      ('online_tests', MoreItem('tests', 'Tests and exams', 'Take a test or see your answers', (_) => const StudentTests())),
+      ('lms.enabled', MoreItem('learn', w('{Learn}'), w('{Courses}, {lessons} and {assignments}'), (_) => const StudentLearn())),
+      ('online_tests', MoreItem('tests', w('{Tests} and {exams}'), w('Take a {test} or see your answers'), (_) => const StudentTests())),
       ('school_calendar', MoreItem('calendar', 'School calendar', 'Term dates and events', (_) => const CalendarScreen())),
     ]);
 

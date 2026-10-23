@@ -528,7 +528,7 @@ String iconFor(String label) {
   const map = <(String, String)>[
     ('fee|bill|pay', 'wallet-outline'), ('result|score|grade', 'ribbon-outline'), ('attend|register', 'checkmark-done-outline'), ('notice|inbox|alert', 'notifications-outline'),
     ('message|chat', 'chatbubbles-outline'), ('meeting|meet', 'people-circle-outline'), ('help', 'help-buoy-outline'), ('homework', 'book-outline'), ('calendar|day|today', 'calendar-outline'),
-    ('bus|transport', 'bus-outline'), ('board|hostel', 'bed-outline'), ('learn|course', 'library-outline'), ('test|exam', 'document-text-outline'), ('leave', 'airplane-outline'), ('payslip|pay slip', 'receipt-outline'),
+    ('bus|transport', 'bus-outline'), ('board|hostel', 'bed-outline'), ('learn|course|lesson|activit|e-class', 'library-outline'), ('test|exam|quiz', 'document-text-outline'), ('leave', 'airplane-outline'), ('payslip|pay slip', 'receipt-outline'),
     ('class', 'people-outline'), ('search', 'search-outline'), ('setting|account', 'settings-outline'), ('more', 'grid-outline'), ('home', 'home-outline'),
   ];
   for (final m in map) {

@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/entitle.dart';
+import '../core/words.dart';
 import '../features/gate.dart';
 import '../features/pdf_view.dart';
 import '../features/richtext.dart';
@@ -45,7 +46,7 @@ class _StudentLearnState extends State<StudentLearn> {
 
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('lms.enabled')) return const LockedView(title: 'Learn', feature: 'lms.enabled');
+    if (!Ent.I.on('lms.enabled')) return LockedView(title: w('{Learn}'), feature: 'lms.enabled');
     final at = _stack.last;
     final page = switch (at.kind) {
       'course' => _Course(key: ValueKey('c${at.id}$_bump'), id: at.id!, onLesson: (id) => _open('lesson', id)),
@@ -55,7 +56,7 @@ class _StudentLearnState extends State<StudentLearn> {
       _ => _Home(key: ValueKey('h$_bump'), onCourse: (id) => _open('course', id), onLesson: (id) => _open('lesson', id), onAssignments: () => _open('assignments')),
     };
     if (_stack.length == 1) return page;
-    final label = switch (at.kind) { 'lesson' => 'Course', 'assignment' => 'Assignments', _ => 'Learn' };
+    final label = switch (at.kind) { 'lesson' => w('{Course}'), 'assignment' => w('{Assignments}'), _ => w('{Learn}') };
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -72,7 +73,7 @@ class _Home extends StatelessWidget {
   const _Home({super.key, required this.onCourse, required this.onLesson, required this.onAssignments});
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('lms.dashboard')) return const LockedView(title: 'Learn', feature: 'lms.dashboard');
+    if (!Ent.I.on('lms.dashboard')) return LockedView(title: w('{Learn}'), feature: 'lms.dashboard');
     return LoadView(
       path: 'lms/learn',
       builder: (context, d, reload) {
@@ -80,11 +81,11 @@ class _Home extends StatelessWidget {
         final cont = d['continue'] as Map?;
         final courses = _l(d['courses']);
         return Screen(onRefresh: reload, children: [
-          const PageTitle('Learn', sub: 'Your courses, lessons and assignments.'),
+          PageTitle(w('{Learn}'), sub: w('Your {courses}, {lessons} and {assignments}.')),
           const ReadOnlyNote('lms.courses'),
           StatRow([
-            Stat(icon: 'library-outline', label: 'Courses', value: '${stats['courses']}'),
-            Stat(icon: 'checkmark-done-outline', label: 'Lessons done', value: '${stats['done']} / ${stats['lessons']}'),
+            Stat(icon: 'library-outline', label: w('{Courses}'), value: '${stats['courses']}'),
+            Stat(icon: 'checkmark-done-outline', label: w('{Lessons} done'), value: '${stats['done']} / ${stats['lessons']}'),
             Stat(icon: 'trending-up-outline', label: 'Overall', value: '${stats['percent']}%'),
           ]),
           if (cont != null && cont['next'] != null)
@@ -93,8 +94,8 @@ class _Home extends StatelessWidget {
               Muted('Next: ${(cont['next'] as Map)['title']}'),
               Bar((cont['percent'] as num).toDouble()),
             ]),
-          if (Ent.I.on('lms.assignments')) ListGroup([ListRow(icon: 'document-text-outline', title: 'Assignments', sub: 'Work to hand in, and your marks', onPress: onAssignments)]),
-          if (courses.isEmpty) const Empty(icon: 'library-outline', title: 'No courses yet', body: 'When a teacher publishes a course for your class, it appears here.'),
+          if (Ent.I.on('lms.assignments')) ListGroup([ListRow(icon: 'document-text-outline', title: w('{Assignments}'), sub: 'Work to hand in, and your marks', onPress: onAssignments)]),
+          if (courses.isEmpty) Empty(icon: 'library-outline', title: w('No {courses} yet'), body: w('When a teacher publishes a {course} for your class, it appears here.')),
           for (final c in courses)
             ECard(onPress: () => onCourse('${c['id']}'), children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -104,7 +105,7 @@ class _Home extends StatelessWidget {
                 Text('${c['percent']}%', style: Ty.custom(15, FontWeight.w800, c: color.brand)),
               ]),
               Bar((c['percent'] as num).toDouble()),
-              Muted('${c['done']} of ${c['total']} lessons done'),
+              Muted(w('${c['done']} of ${c['total']} {lessons} done')),
             ]),
         ]);
       },
@@ -118,7 +119,7 @@ class _Course extends StatelessWidget {
   const _Course({super.key, required this.id, required this.onLesson});
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('lms.courses')) return const LockedView(title: 'Course', feature: 'lms.courses');
+    if (!Ent.I.on('lms.courses')) return LockedView(title: w('{Course}'), feature: 'lms.courses');
     return LoadView(
       path: 'lms/learn/courses/$id',
       builder: (context, d, reload) {
@@ -135,11 +136,11 @@ class _Course extends StatelessWidget {
         return Screen(onRefresh: reload, children: [
           PageTitle('${c['title']}', sub: [c['subject'], c['teacher']].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
           if ((c['summary'] as String?)?.isNotEmpty == true) Text('${c['summary']}', style: Ty.body()),
-          ECard(children: [Row(children: [Expanded(child: Muted('${c['done']} of ${c['total']} lessons done')), Text('${c['percent']}%', style: Ty.custom(15, FontWeight.w800, c: color.brand))]), Bar((c['percent'] as num).toDouble())]),
-          if (d['finished'] == true) const ECard(icon: 'ribbon-outline', title: 'Course complete', children: [Text('You have finished every lesson. Well done.')]),
+          ECard(children: [Row(children: [Expanded(child: Muted(w('${c['done']} of ${c['total']} {lessons} done'))), Text('${c['percent']}%', style: Ty.custom(15, FontWeight.w800, c: color.brand))]), Bar((c['percent'] as num).toDouble())]),
+          if (d['finished'] == true) ECard(icon: 'ribbon-outline', title: w('{Course} complete'), children: [Text(w('You have finished every {lesson}. Well done.'))]),
           for (final t in _l(d['topics'])) Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [SectionTitle('${t['title']}'), const SizedBox(height: 8), lessons(_l(t['lessons']))]),
-          if (_l(d['loose']).isNotEmpty) Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [if (_l(d['topics']).isNotEmpty) ...[const SectionTitle('More lessons'), const SizedBox(height: 8)], lessons(_l(d['loose']))]),
-          if (_l(d['topics']).isEmpty && _l(d['loose']).isEmpty) const Empty(icon: 'document-text-outline', title: 'No lessons yet', body: 'Your teacher has not published a lesson in this course.'),
+          if (_l(d['loose']).isNotEmpty) Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [if (_l(d['topics']).isNotEmpty) ...[SectionTitle(w('More {lessons}')), const SizedBox(height: 8)], lessons(_l(d['loose']))]),
+          if (_l(d['topics']).isEmpty && _l(d['loose']).isEmpty) Empty(icon: 'document-text-outline', title: w('No {lessons} yet'), body: w('Your teacher has not published a {lesson} in this {course}.')),
         ]);
       },
     );
@@ -246,7 +247,7 @@ class _LessonState extends State<_Lesson> {
 
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('lms.lessons')) return const LockedView(title: 'Lesson', feature: 'lms.lessons');
+    if (!Ent.I.on('lms.lessons')) return LockedView(title: w('{Lesson}'), feature: 'lms.lessons');
     return LoadView(
       path: 'lms/learn/lessons/${widget.id}',
       builder: (context, d, reload) {
@@ -257,7 +258,7 @@ class _LessonState extends State<_Lesson> {
         final video = l['video_url'] as String?;
         final mats = _l(d['materials']);
         return Screen(onRefresh: reload, children: [
-          PageTitle('${l['title']}', sub: [(d['course'] as Map)['title'], if (l['topic'] != null) l['topic'], 'Lesson ${d['position']} of ${d['of']}'].join(' · ')),
+          PageTitle('${l['title']}', sub: [(d['course'] as Map)['title'], if (l['topic'] != null) l['topic'], w('{Lesson} ${d['position']} of ${d['of']}')].join(' · ')),
           if (Ent.I.readonly('lms.progress')) const ReadOnlyNote('lms.progress'),
           if (video != null && video.isNotEmpty) AppButton('Watch the video', icon: 'play-circle-outline', kind: BtnKind.soft, onPressed: () => openLink(video)),
           if ((l['body'] as String?)?.isNotEmpty == true) LessonText('${l['body']}'),
@@ -269,7 +270,7 @@ class _LessonState extends State<_Lesson> {
           Row(children: [
             Expanded(child: prev == null ? const SizedBox.shrink() : AppButton('Previous', icon: 'chevron-back', kind: BtnKind.plain, onPressed: () => widget.onGo('${prev['id']}'))),
             if (prev != null && next != null) const SizedBox(width: 10),
-            Expanded(child: next == null ? const SizedBox.shrink() : AppButton('Next lesson', icon: 'chevron-forward', onPressed: () => widget.onGo('${next['id']}'))),
+            Expanded(child: next == null ? const SizedBox.shrink() : AppButton(w('Next {lesson}'), icon: 'chevron-forward', onPressed: () => widget.onGo('${next['id']}'))),
           ]),
         ]);
       },
@@ -286,17 +287,17 @@ class _Assignments extends StatelessWidget {
   const _Assignments({super.key, required this.onOpen});
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('lms.assignments')) return const LockedView(title: 'Assignments', feature: 'lms.assignments');
+    if (!Ent.I.on('lms.assignments')) return LockedView(title: w('{Assignments}'), feature: 'lms.assignments');
     return LoadView(
       path: 'lms/learn/assignments',
       builder: (context, d, reload) {
         final rows = _l(d['assignments']);
         final s = d['stats'] as Map;
         return Screen(onRefresh: reload, children: [
-          const PageTitle('Assignments', sub: 'Work from your courses.'),
+          PageTitle(w('{Assignments}'), sub: w('Work from your {courses}.')),
           const ReadOnlyNote('lms.assignments'),
           StatRow([Stat(icon: 'time-outline', label: 'To do', value: '${s['todo']}'), Stat(icon: 'paper-plane-outline', label: 'Handed in', value: '${s['submitted']}'), Stat(icon: 'ribbon-outline', label: 'Marked', value: '${s['graded']}')]),
-          if (rows.isEmpty) const Empty(icon: 'document-text-outline', title: 'No assignments yet', body: 'They appear here when a teacher sets one.'),
+          if (rows.isEmpty) Empty(icon: 'document-text-outline', title: w('No {assignments} yet'), body: 'They appear here when a teacher sets one.'),
           for (final a in rows)
             ECard(onPress: () => onOpen('${a['id']}'), children: [
               Row(children: [
@@ -427,7 +428,7 @@ class _TeacherLearnState extends State<TeacherLearn> {
 
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('lms.enabled')) return const LockedView(title: 'Learning', feature: 'lms.enabled');
+    if (!Ent.I.on('lms.enabled')) return LockedView(title: w('{Learning}'), feature: 'lms.enabled');
     final at = _stack.last;
     final page = switch (at.kind) {
       'course' => _TCourse(key: ValueKey('c${at.id}$_bump'), id: at.id!, onOpen: (id) => _open('assignment', id)),
@@ -441,7 +442,7 @@ class _TeacherLearnState extends State<TeacherLearn> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _back();
       },
-      child: WithBack(onBack: _back, label: switch (at.kind) { 'mark' => 'Assignment', 'assignment' => 'Course', _ => 'Learning' }, child: page),
+      child: WithBack(onBack: _back, label: switch (at.kind) { 'mark' => w('{Assignment}'), 'assignment' => w('{Course}'), _ => w('{Learning}') }, child: page),
     );
   }
 }
@@ -451,7 +452,7 @@ class _THome extends StatelessWidget {
   const _THome({super.key, required this.onOpen});
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('lms.dashboard')) return const LockedView(title: 'Learning', feature: 'lms.dashboard');
+    if (!Ent.I.on('lms.dashboard')) return LockedView(title: w('{Learning}'), feature: 'lms.dashboard');
     return LoadView(
       path: 'lms/teach',
       builder: (context, d, reload) {
@@ -459,14 +460,14 @@ class _THome extends StatelessWidget {
         final courses = _l(d['courses']);
         final assignments = (d['can'] as Map)['assignments'] == true && Ent.I.on('lms.assignments');
         return Screen(onRefresh: reload, children: [
-          const PageTitle('Learning', sub: 'Your courses. Build lessons on the website; mark assignments here.'),
+          PageTitle(w('{Learning}'), sub: w('Your {courses}. Build {lessons} on the website; mark {assignments} here.')),
           const ReadOnlyNote('lms.courses'),
           StatRow([
-            Stat(icon: 'library-outline', label: 'Courses', value: '${s['courses']}'),
-            Stat(icon: 'document-text-outline', label: 'Lessons live', value: '${s['lessons']}'),
+            Stat(icon: 'library-outline', label: w('{Courses}'), value: '${s['courses']}'),
+            Stat(icon: 'document-text-outline', label: w('{Lessons} live'), value: '${s['lessons']}'),
             Stat(icon: 'people-outline', label: 'Active this week', value: '${s['active_students']} / ${s['students']}'),
           ]),
-          if (courses.isEmpty) const Empty(icon: 'library-outline', title: 'No courses yet', body: 'Create a course on the school website and it will show here.'),
+          if (courses.isEmpty) Empty(icon: 'library-outline', title: w('No {courses} yet'), body: w('Create a {course} on the school website and it will show here.')),
           for (final c in courses)
             ECard(onPress: assignments ? () => onOpen('${c['id']}') : null, children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -475,7 +476,7 @@ class _THome extends StatelessWidget {
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${c['title']}', style: Ty.h3()), Muted([c['subject'], (c['classes'] as List?)?.join(', ')].where((x) => x != null && '$x'.isNotEmpty).join(' · '))])),
                 if (c['status'] != 'published') Pill(c['status'] == 'draft' ? 'Draft' : 'Archived', toneName: c['status'] == 'draft' ? 'amber' : 'grey'),
               ]),
-              Muted('${c['lessons'] ?? 0} lessons'),
+              Muted(w('${c['lessons'] ?? 0} {lessons}')),
             ]),
         ]);
       },
@@ -489,14 +490,14 @@ class _TCourse extends StatelessWidget {
   const _TCourse({super.key, required this.id, required this.onOpen});
   @override
   Widget build(BuildContext context) {
-    if (!Ent.I.on('lms.assignments')) return const LockedView(title: 'Assignments', feature: 'lms.assignments');
+    if (!Ent.I.on('lms.assignments')) return LockedView(title: w('{Assignments}'), feature: 'lms.assignments');
     return LoadView(
       path: 'lms/courses/$id/assignments',
       builder: (context, d, reload) {
         final rows = _l(d['assignments']);
         return Screen(onRefresh: reload, children: [
-          const PageTitle('Assignments', sub: 'Tap one to see who handed in.'),
-          if (rows.isEmpty) const Empty(icon: 'document-text-outline', title: 'No assignments yet', body: 'Set one on the school website.'),
+          PageTitle(w('{Assignments}'), sub: 'Tap one to see who handed in.'),
+          if (rows.isEmpty) Empty(icon: 'document-text-outline', title: w('No {assignments} yet'), body: 'Set one on the school website.'),
           for (final a in rows)
             ECard(onPress: a['status'] == 'draft' ? null : () => onOpen('${a['id']}'), children: [
               Row(children: [

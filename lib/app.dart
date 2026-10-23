@@ -86,6 +86,7 @@ class EducoreApp extends StatefulWidget {
 }
 
 class _EducoreAppState extends State<EducoreApp> {
+  final ValueNotifier<int> _changed = ValueNotifier(0);
   bool _ready = false;
   Session? _session;
   Mode _mode = Mode.system;
@@ -108,7 +109,14 @@ class _EducoreAppState extends State<EducoreApp> {
   }
 
   @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _changed.value++;
+  }
+
+  @override
   void dispose() {
+    _changed.dispose();
     _lock.dispose();
     _update.dispose();
     _links?.cancel();
@@ -251,7 +259,8 @@ class _EducoreAppState extends State<EducoreApp> {
       themeMode: dark ? ThemeMode.dark : ThemeMode.light,
       theme: _themeData(dark),
       darkTheme: _themeData(dark),
-      home: _home(),
+      // The first route keeps whatever it was built with, so it is told to rebuild whenever this state changes.
+      home: ListenableBuilder(listenable: _changed, builder: (context, _) => _home()),
     );
   }
 

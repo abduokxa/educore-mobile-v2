@@ -3,6 +3,14 @@ import 'package:flutter/widgets.dart';
 import 'package:ionicons/ionicons.dart';
 
 const Map<String, IconData> _ion = {
+  'attach-outline': Ionicons.attachOutline,
+  'document-attach-outline': Ionicons.documentAttachOutline,
+  'folder-open-outline': Ionicons.folderOpenOutline,
+  'link-outline': Ionicons.linkOutline,
+  'play-circle-outline': Ionicons.playCircleOutline,
+  'reader-outline': Ionicons.readerOutline,
+  'trending-up-outline': Ionicons.trendingUpOutline,
+  'videocam-outline': Ionicons.videocamOutline,
   'add-circle-outline': Ionicons.addCircleOutline,
   'airplane-outline': Ionicons.airplaneOutline,
   'alert': Ionicons.alert,

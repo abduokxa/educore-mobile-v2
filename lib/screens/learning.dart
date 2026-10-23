@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/entitle.dart';
@@ -326,6 +327,27 @@ class _Assignment extends StatefulWidget {
 class _AssignmentState extends State<_Assignment> {
   final _text = TextEditingController();
   bool _busy = false, _seeded = false;
+  PlatformFile? _file;
+  int _size = 0;
+
+  Future<void> _pick() async {
+    try {
+      final r = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'png', 'jpg', 'jpeg', 'zip']);
+      if (r.isEmpty) return;
+      final f = r.first;
+      final size = await f.length() ?? 0;
+      if (size > 20 * 1024 * 1024) {
+        notify.err('That file is too big', 'The most is 20 MB.');
+        return;
+      }
+      setState(() {
+        _file = f;
+        _size = size;
+      });
+    } catch (_) {
+      notify.err('Could not open your files');
+    }
+  }
 
   @override
   void dispose() {
@@ -336,8 +358,9 @@ class _AssignmentState extends State<_Assignment> {
   Future<void> _send(Future<void> Function() reload) async {
     setState(() => _busy = true);
     try {
-      final r = await api('lms/learn/assignments/${widget.id}/submit', method: 'POST', body: {'body': _text.text.trim()});
+      final r = await apiUpload('lms/learn/assignments/${widget.id}/submit', fields: {if (_text.text.trim().isNotEmpty) 'body': _text.text.trim()}, filePath: _file?.path);
       notify.ok('Handed in', '${r['message'] ?? 'Your work was sent.'}');
+      setState(() => _file = null);
       await reload();
     } catch (e) {
       _fail(e, 'Could not hand in');
@@ -357,7 +380,7 @@ class _AssignmentState extends State<_Assignment> {
             _seeded = true;
             _text.text = '${sub?['body'] ?? ''}';
           }
-          final fileOnly = a['accepts'] == 'file';
+          final accepts = '${a['accepts']}';
           return Screen(onRefresh: reload, children: [
             PageTitle('${a['title']}', sub: [a['course_title'], if (a['due'] != null) 'Due ${a['due']}', 'Out of ${a['max']}'].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
             Align(alignment: Alignment.centerLeft, child: Pill(_states['${a['state']}']?.$1 ?? '${a['state']}', toneName: _states['${a['state']}']?.$2 ?? 'grey')),
@@ -370,12 +393,224 @@ class _AssignmentState extends State<_Assignment> {
               ]),
             if (sub != null && sub['status'] != 'graded') ECard(title: 'You handed this in', icon: 'checkmark-circle-outline', children: [Muted('${sub['submitted']}${sub['late'] == true ? ' (late)' : ''}')]),
             if (sub != null && sub['file'] != null) ECard(children: [ListRow(icon: 'document-attach-outline', title: '${(sub['file'] as Map)['name']}', sub: 'Your file', onPress: () => openLink('${(sub['file'] as Map)['url']}'))]),
-            if (can && !fileOnly) ...[
-              Field(label: sub == null ? 'Your answer' : 'Change your answer', controller: _text, multiline: true, rows: 7, hint: 'Write your work here'),
-              AppButton(sub == null ? 'Hand in' : 'Hand in again', icon: 'paper-plane-outline', busy: _busy, disabled: _text.text.trim().isEmpty && _busy, onPressed: () => _send(reload)),
+            if (can) ...[
+              if (accepts != 'file') Field(label: sub == null ? 'Your answer' : 'Change your answer', controller: _text, multiline: true, rows: 7, hint: 'Write your work here', onChanged: (_) => setState(() {})),
+              if (accepts != 'text')
+                ECard(icon: 'attach-outline', title: accepts == 'file' ? 'Attach your work' : 'Attach a file (optional)', children: [
+                  if (_file != null) ListRow(icon: 'document-attach-outline', title: _file!.name, sub: '${(_size / 1024).round()} KB', right: Tap(label: 'Remove file', onTap: () => setState(() => _file = null), child: const Icn('close-circle', size: 22)))
+                  else const Muted('PDF, Word, PowerPoint, Excel, text, a photo or a zip. Up to 20 MB.'),
+                  AppButton(_file == null ? 'Choose a file' : 'Choose a different file', icon: 'folder-open-outline', kind: BtnKind.soft, onPressed: _pick),
+                ]),
+              AppButton(sub == null ? 'Hand in' : 'Hand in again', icon: 'paper-plane-outline', busy: _busy, disabled: _text.text.trim().isEmpty && _file == null, onPressed: () => _send(reload)),
             ],
-            if (can && fileOnly) const ECard(icon: 'attach-outline', title: 'This one needs a file', children: [Text('Your teacher asked for a file. Hand it in from the school website for now.')]),
           ]);
         },
       );
+}
+
+/// A teacher's learning on the phone: their courses, the assignments in each, and marking what students handed in.
+class TeacherLearn extends StatefulWidget {
+  const TeacherLearn({super.key});
+  @override
+  State<TeacherLearn> createState() => _TeacherLearnState();
+}
+
+class _TeacherLearnState extends State<TeacherLearn> {
+  final List<_At> _stack = [const _At('home')];
+  int _bump = 0;
+
+  void _open(String kind, String id) => setState(() => _stack.add(_At(kind, id)));
+  void _back() => setState(() {
+        _stack.removeLast();
+        _bump++;
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Ent.I.on('lms.enabled')) return const LockedView(title: 'Learning', feature: 'lms.enabled');
+    final at = _stack.last;
+    final page = switch (at.kind) {
+      'course' => _TCourse(key: ValueKey('c${at.id}$_bump'), id: at.id!, onOpen: (id) => _open('assignment', id)),
+      'assignment' => _TAssignment(key: ValueKey('a${at.id}$_bump'), id: at.id!, onOpen: (id) => _open('mark', id)),
+      'mark' => _TMark(key: ValueKey('m${at.id}'), id: at.id!, onDone: _back),
+      _ => _THome(key: ValueKey('h$_bump'), onOpen: (id) => _open('course', id)),
+    };
+    if (_stack.length == 1) return page;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: WithBack(onBack: _back, label: switch (at.kind) { 'mark' => 'Assignment', 'assignment' => 'Course', _ => 'Learning' }, child: page),
+    );
+  }
+}
+
+class _THome extends StatelessWidget {
+  final void Function(String) onOpen;
+  const _THome({super.key, required this.onOpen});
+  @override
+  Widget build(BuildContext context) {
+    if (!Ent.I.on('lms.dashboard')) return const LockedView(title: 'Learning', feature: 'lms.dashboard');
+    return LoadView(
+      path: 'lms/teach',
+      builder: (context, d, reload) {
+        final s = d['stats'] as Map;
+        final courses = _l(d['courses']);
+        final assignments = (d['can'] as Map)['assignments'] == true && Ent.I.on('lms.assignments');
+        return Screen(onRefresh: reload, children: [
+          const PageTitle('Learning', sub: 'Your courses. Build lessons on the website; mark assignments here.'),
+          const ReadOnlyNote('lms.courses'),
+          StatRow([
+            Stat(icon: 'library-outline', label: 'Courses', value: '${s['courses']}'),
+            Stat(icon: 'document-text-outline', label: 'Lessons live', value: '${s['lessons']}'),
+            Stat(icon: 'people-outline', label: 'Active this week', value: '${s['active_students']} / ${s['students']}'),
+          ]),
+          if (courses.isEmpty) const Empty(icon: 'library-outline', title: 'No courses yet', body: 'Create a course on the school website and it will show here.'),
+          for (final c in courses)
+            ECard(onPress: assignments ? () => onOpen('${c['id']}') : null, children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(width: 46, height: 46, decoration: BoxDecoration(color: _tile('${c['colour']}'), borderRadius: BorderRadius.circular(14)), child: const Icn('book-outline', size: 24, tint: Colors.white)),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${c['title']}', style: Ty.h3()), Muted([c['subject'], (c['classes'] as List?)?.join(', ')].where((x) => x != null && '$x'.isNotEmpty).join(' · '))])),
+                if (c['status'] != 'published') Pill(c['status'] == 'draft' ? 'Draft' : 'Archived', toneName: c['status'] == 'draft' ? 'amber' : 'grey'),
+              ]),
+              Muted('${c['lessons'] ?? 0} lessons'),
+            ]),
+        ]);
+      },
+    );
+  }
+}
+
+class _TCourse extends StatelessWidget {
+  final String id;
+  final void Function(String) onOpen;
+  const _TCourse({super.key, required this.id, required this.onOpen});
+  @override
+  Widget build(BuildContext context) {
+    if (!Ent.I.on('lms.assignments')) return const LockedView(title: 'Assignments', feature: 'lms.assignments');
+    return LoadView(
+      path: 'lms/courses/$id/assignments',
+      builder: (context, d, reload) {
+        final rows = _l(d['assignments']);
+        return Screen(onRefresh: reload, children: [
+          const PageTitle('Assignments', sub: 'Tap one to see who handed in.'),
+          if (rows.isEmpty) const Empty(icon: 'document-text-outline', title: 'No assignments yet', body: 'Set one on the school website.'),
+          for (final a in rows)
+            ECard(onPress: a['status'] == 'draft' ? null : () => onOpen('${a['id']}'), children: [
+              Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${a['title']}', style: Ty.h3()), Muted(a['due'] != null ? 'Due ${a['due']}' : 'No deadline')])),
+                Pill(a['status'] == 'draft' ? 'Draft' : (a['status'] == 'closed' ? 'Closed' : 'Open'), toneName: a['status'] == 'draft' ? 'amber' : (a['status'] == 'closed' ? 'grey' : 'green')),
+              ]),
+              Muted('${a['submitted']} of ${d['students']} handed in · ${a['graded']} marked'),
+              if ((a['submitted'] as num) > (a['graded'] as num)) Pill('${(a['submitted'] as num) - (a['graded'] as num)} to mark', toneName: 'amber'),
+            ]),
+        ]);
+      },
+    );
+  }
+}
+
+class _TAssignment extends StatelessWidget {
+  final String id;
+  final void Function(String) onOpen;
+  const _TAssignment({super.key, required this.id, required this.onOpen});
+  @override
+  Widget build(BuildContext context) => LoadView(
+        path: 'lms/assignments/$id',
+        builder: (context, d, reload) {
+          final a = d['assignment'] as Map;
+          final s = d['summary'] as Map;
+          final rows = _l(d['rows']);
+          const tones = {'missing': ('Not handed in', 'red'), 'submitted': ('To mark', 'amber'), 'late': ('Late, to mark', 'amber'), 'graded': ('Marked', 'green')};
+          return Screen(onRefresh: reload, children: [
+            PageTitle('${a['title']}', sub: [if (a['due'] != null) 'Due ${a['due']}', 'Out of ${a['max']}'].join(' · ')),
+            StatRow([Stat(icon: 'paper-plane-outline', label: 'Handed in', value: '${s['submitted']} / ${s['students']}'), Stat(icon: 'ribbon-outline', label: 'Marked', value: '${s['graded']}'), Stat(icon: 'stats-chart-outline', label: 'Average', value: s['average'] == null ? '–' : _n(s['average']))]),
+            ListGroup([
+              for (final r in rows)
+                ListRow(
+                  title: '${r['student']}',
+                  sub: '${r['class'] ?? ''}${r['submission'] != null && r['submission']['score'] != null ? ' · ${_n(r['submission']['score'])} / ${a['max']}' : ''}',
+                  badge: Pill(tones['${r['state']}']?.$1 ?? '${r['state']}', toneName: tones['${r['state']}']?.$2 ?? 'grey'),
+                  onPress: r['submission'] == null ? null : () => onOpen('${(r['submission'] as Map)['id']}|$id'),
+                ),
+            ]),
+          ]);
+        },
+      );
+}
+
+class _TMark extends StatefulWidget {
+  final String id;
+  final VoidCallback onDone;
+  const _TMark({super.key, required this.id, required this.onDone});
+  @override
+  State<_TMark> createState() => _TMarkState();
+}
+
+class _TMarkState extends State<_TMark> {
+  final _score = TextEditingController(), _note = TextEditingController();
+  bool _busy = false, _seeded = false;
+  late final String _sub = widget.id.split('|').first, _assignment = widget.id.split('|').last;
+
+  @override
+  void dispose() {
+    _score.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(num max) async {
+    final v = num.tryParse(_score.text.trim().replaceAll(',', '.'));
+    if (v == null || v < 0 || v > max) {
+      notify.err('Check the score', 'Enter a number from 0 to $max.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final r = await api('lms/submissions/$_sub/grade', method: 'POST', body: {'score': v, 'feedback': _note.text.trim()});
+      notify.ok('Marked', '${r['message']}');
+      widget.onDone();
+    } catch (e) {
+      _fail(e, 'Could not save');
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => LoadView(
+        path: 'lms/assignments/$_assignment',
+        builder: (context, d, reload) {
+          final a = d['assignment'] as Map;
+          final row = _l(d['rows']).cast<Map>().firstWhere((r) => r['submission'] != null && (r['submission'] as Map)['id'] == _sub, orElse: () => {});
+          final sub = row['submission'] as Map?;
+          if (sub == null) return const Screen(children: [Empty(icon: 'document-text-outline', title: 'Nothing handed in')]);
+          if (!_seeded) {
+            _seeded = true;
+            _score.text = sub['score'] == null ? '' : _n(sub['score']);
+            _note.text = '${sub['feedback'] ?? ''}';
+          }
+          final max = (a['max'] as num);
+          final canMark = Ent.I.writable('lms.feedback');
+          return Screen(footer: canMark ? AppButton('Save mark', icon: 'checkmark-done', busy: _busy, onPressed: () => _save(max)) : null, children: [
+            PageTitle('${row['student']}', sub: '${a['title']} · ${sub['submitted']}${sub['late'] == true ? ' (late)' : ''}'),
+            if (!canMark) const ReadOnlyNote('lms.feedback'),
+            if ((sub['body'] as String?)?.isNotEmpty == true) ECard(title: 'Their answer', icon: 'reader-outline', children: [Text('${sub['body']}', style: Ty.body())]),
+            if (sub['file'] != null) ECard(children: [ListRow(icon: 'document-attach-outline', title: '${(sub['file'] as Map)['name']}', sub: 'Tap to open', onPress: () => _openFile('${(sub['file'] as Map)['url']}', '${(sub['file'] as Map)['name']}'))]),
+            if (canMark) ...[
+              Field(label: 'Score out of ${_n(max)}', controller: _score, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+              Field(label: 'Feedback for the student', controller: _note, multiline: true, rows: 4, hint: 'What went well, what to improve'),
+            ],
+          ]);
+        },
+      );
+
+  Future<void> _openFile(String url, String name) async {
+    if (name.toLowerCase().endsWith('.pdf')) {
+      await previewDocument(url, const {}, name, title: name);
+    } else {
+      await openLink(url);
+    }
+  }
 }

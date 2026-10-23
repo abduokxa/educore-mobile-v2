@@ -287,6 +287,36 @@ Future<dynamic> _request(String path, String method, dynamic body, String qs) as
   return out;
 }
 
+/// Sends a form with a file in it (a piece of homework). Sent once; a dropped connection is reported, not retried.
+Future<dynamic> apiUpload(String path, {Map<String, String> fields = const {}, String? filePath, String fileField = 'file'}) async {
+  final req = http.MultipartRequest('POST', Uri.parse('${baseUrl()}/api/$path'));
+  req.headers.addAll({'Accept': 'application/json', ...authHeaders()});
+  req.fields.addAll(fields);
+  if (filePath != null) req.files.add(await http.MultipartFile.fromPath(fileField, filePath));
+  http.Response res;
+  try {
+    res = await http.Response.fromStream(await req.send().timeout(const Duration(minutes: 3)));
+    Net.I.goOnline();
+  } catch (_) {
+    Net.I.goOffline();
+    throw ApiError(0, 'You seem to be offline. Check your connection and try again.');
+  }
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    dynamic data;
+    try {
+      data = _decode(res);
+    } catch (_) {/* not JSON */}
+    final errs = <String, List<String>>{};
+    if (data is Map && data['errors'] is Map) {
+      (data['errors'] as Map).forEach((k, v) => errs['$k'] = v is List ? v.map((e) => '$e').toList() : ['$v']);
+    }
+    throw ApiError(res.statusCode, data is Map && data['message'] is String ? data['message'] as String : 'That did not work. Please try again.', errs);
+  }
+  _memory.clear();
+  _scheduleSnapshot();
+  return res.statusCode == 204 ? null : _decode(res);
+}
+
 /// Send what was saved while offline. Called when a request succeeds, so it runs as soon as there is signal.
 Future<int> syncOutbox() {
   return Offline.I.flush((q) async {

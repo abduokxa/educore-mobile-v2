@@ -64,6 +64,7 @@ List<MoreItem> _teacherMore(Session s) => _menu(s, [
       ('chat', MoreItem('meetings', 'Parent meetings', 'Offer times, see who booked', (_) => const TeacherMeetings())),
       ('students', MoreItem('help', 'Help', 'How things work', (_) => const HelpDocs())),
       ('homework', MoreItem('homework', 'Homework', 'Homework you set', (_) => const TeacherHomework())),
+      ('lms.enabled', MoreItem('learn', 'Learning', 'Your courses and assignments to mark', (_) => const TeacherLearn())),
       ('cbt.manual_grading', MoreItem('mark-exams', 'Mark exams', 'Written answers waiting for your marks', (_) => const TeacherMarking())),
       ('exams', MoreItem('class-results', 'Class results', 'Your class once the results are open', (_) => const TeacherClassResults())),
       ('leave', MoreItem('leave', 'Leave', 'Ask for leave and see decisions', (_) => const TeacherLeave())),

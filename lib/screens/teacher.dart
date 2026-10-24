@@ -17,7 +17,7 @@ class TeacherHome extends StatelessWidget {
           return Screen(onRefresh: reload, children: [
             HeroBlock(title: 'My day', sub: d['today'] as String?, icon: 'today-outline'),
             ShortcutGrid([
-              if (register != null) ShortcutItem('Register', () => Nav.I.go('Register'), hint: register['marked'] == true ? 'Marked' : 'Not marked'),
+              if (register != null) ShortcutItem('Register', () => Nav.I.go('Register'), hint: register['marked'] == true ? 'Marked' : (register['closed'] != null ? 'No school' : 'Not marked')),
               ShortcutItem('Scores', () => Nav.I.go('Scores')),
               ShortcutItem('Notices', () => Nav.I.go('Notices')),
             ]),
@@ -40,9 +40,9 @@ class TeacherHome extends StatelessWidget {
             ]),
             Columns([
               if (register != null)
-                ECard(title: 'Register', icon: 'clipboard-outline', right: Pill(register['marked'] == true ? 'Marked' : 'Not marked', toneName: register['marked'] == true ? 'green' : 'amber'), children: [
+                ECard(title: 'Register', icon: 'clipboard-outline', right: Pill(register['marked'] == true ? 'Marked' : (register['closed'] != null ? 'Closed' : 'Not marked'), toneName: register['marked'] == true ? 'green' : (register['closed'] != null ? 'grey' : 'amber')), children: [
                   Muted('${register['class']} · ${register['detail']}'),
-                  if (register['marked'] != true) AppButton('Mark the register', kind: BtnKind.soft, icon: 'checkmark-done-outline', onPressed: () => Nav.I.go('Register')),
+                  if (register['marked'] != true && register['closed'] == null) AppButton('Mark the register', kind: BtnKind.soft, icon: 'checkmark-done-outline', onPressed: () => Nav.I.go('Register')),
                 ]),
               ECard(title: "Today's lessons", icon: 'time-outline', children: [
                 if (_l(d['periods']).isEmpty) const Muted('No lessons today.'),
@@ -109,12 +109,14 @@ class _RegisterBodyState extends State<_RegisterBody> {
   Widget build(BuildContext context) {
     final d = widget.data;
     final locked = d['locked'] == true;
+    final closed = d['closed'] as String?;
+    final readOnly = locked || closed != null;
     int n(String m) => _marks.values.where((x) => x == m).length;
     final tones = {'present': color.brand, 'late': tone('amber').fg, 'absent': color.danger};
     const label = {'present': 'P', 'late': 'L', 'absent': 'A'};
     return Screen(
       onRefresh: widget.reload,
-      footer: locked
+      footer: readOnly
           ? null
           : Row(children: [
               Expanded(flex: 10, child: AppButton('Save draft', kind: BtnKind.plain, onPressed: () => _save(false))),
@@ -125,12 +127,14 @@ class _RegisterBodyState extends State<_RegisterBody> {
         PageTitle('Mark attendance', sub: '${d['class']['name']} · ${d['date']}'),
         if (locked)
           ECard(children: [Row(children: [const IconBadge('lock-closed-outline'), const SizedBox(width: 12), Expanded(child: Text('This register was submitted. Only School Admin can change it now.', style: Ty.body()))])]),
+        if (closed != null)
+          ECard(children: [Row(children: [IconBadge('calendar-outline', tint: tone('amber').fg, bg: tone('amber').bg), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('No attendance to mark', style: Ty.body(w: FontWeight.w700)), const SizedBox(height: 2), Text(closed, style: Ty.body())]))])]),
         StatRow([
           Stat(icon: 'checkmark-circle-outline', label: 'Present', value: n('present')),
           Stat(icon: 'time-outline', label: 'Late', value: n('late'), tint: tone('amber').fg),
           Stat(icon: 'close-circle-outline', label: 'Absent', value: n('absent'), tint: tone('red').fg),
         ]),
-        if (!locked) AppButton('Mark everyone present', kind: BtnKind.soft, icon: 'people-outline', onPressed: () => setState(() => _marks = {for (final s in _l(d['students'])) '${s['id']}': 'present'})),
+        if (!readOnly) AppButton('Mark everyone present', kind: BtnKind.soft, icon: 'people-outline', onPressed: () => setState(() => _marks = {for (final s in _l(d['students'])) '${s['id']}': 'present'})),
         ListGroup([
           for (final s in _l(d['students']))
             Padding(
@@ -145,7 +149,7 @@ class _RegisterBodyState extends State<_RegisterBody> {
                     child: Tap(
                       scale: 0.88,
                       label: '${s['name']}: $m',
-                      onTap: locked ? null : () => setState(() => _marks['${s['id']}'] = m),
+                      onTap: readOnly ? null : () => setState(() => _marks['${s['id']}'] = m),
                       child: Container(
                         width: 42,
                         height: 42,

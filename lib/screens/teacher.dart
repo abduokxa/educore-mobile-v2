@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/api.dart';
+import '../features/pick.dart';
 import '../shell/nav.dart';
 import '../ui/ui.dart';
 
@@ -69,16 +70,51 @@ class TeacherHome extends StatelessWidget {
       );
 }
 
-class TeacherRegister extends StatelessWidget {
+class TeacherRegister extends StatefulWidget {
   const TeacherRegister({super.key});
   @override
-  Widget build(BuildContext context) => LoadView(path: 'teacher/register', builder: (context, d, reload) => _RegisterBody(data: d, reload: reload));
+  State<TeacherRegister> createState() => _TeacherRegisterState();
+}
+
+class _TeacherRegisterState extends State<TeacherRegister> {
+  String? _class, _date;
+  bool _form = false;
+
+  @override
+  Widget build(BuildContext context) => LoadView(
+        path: 'teacher/register',
+        query: {'class': _class, 'date': _date},
+        builder: (context, d, reload) {
+          if (_form) return _RegisterBody(data: d, reload: reload, change: () => setState(() => _form = false));
+          final classes = _l(d['classes']);
+          final closed = d['closed'] as String?;
+          return Screen(onRefresh: reload, children: [
+            const PageTitle('Mark attendance', sub: 'Choose the class and the day, then continue to the student list.'),
+            ECard(title: 'Which register?', icon: 'options-outline', gap: 14, children: [
+              if (classes.length > 1)
+                PickGroup('Class', Chips<String>(value: '${d['class']['id']}', onChange: (v) => setState(() => _class = v), options: [for (final c in classes) (value: '${c['id']}', label: '${c['name']}')]))
+              else
+                PickGroup('Class', Text('${d['class']['name']}', style: Ty.body(w: FontWeight.w700))),
+              DateField(label: 'Day', value: '${d['date']}', onChange: (v) => setState(() => _date = v)),
+              if (d['locked'] == true) Muted('This register was already submitted.'),
+              if (closed != null)
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  IconBadge('calendar-outline', size: 36, tint: tone('amber').fg, bg: tone('amber').bg),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('No attendance to mark', style: Ty.body(w: FontWeight.w700)), const SizedBox(height: 2), Text(closed, style: Ty.small())])),
+                ]),
+            ]),
+            AppButton(closed != null ? 'Look at this register' : 'Continue', icon: 'arrow-forward', onPressed: () => setState(() => _form = true)),
+          ]);
+        },
+      );
 }
 
 class _RegisterBody extends StatefulWidget {
   final dynamic data;
   final Future<void> Function() reload;
-  const _RegisterBody({required this.data, required this.reload});
+  final VoidCallback change;
+  const _RegisterBody({required this.data, required this.reload, required this.change});
   @override
   State<_RegisterBody> createState() => _RegisterBodyState();
 }
@@ -125,6 +161,7 @@ class _RegisterBodyState extends State<_RegisterBody> {
             ]),
       children: [
         PageTitle('Mark attendance', sub: '${d['class']['name']} · ${d['date']}'),
+        ChangeBar(summary: '${d['class']['name']} · ${d['date']}', onChange: widget.change),
         if (locked)
           ECard(children: [Row(children: [const IconBadge('lock-closed-outline'), const SizedBox(width: 12), Expanded(child: Text('This register was submitted. Only School Admin can change it now.', style: Ty.body()))])]),
         if (closed != null)
@@ -142,7 +179,10 @@ class _RegisterBodyState extends State<_RegisterBody> {
               child: Row(children: [
                 Avatar('${s['name']}', size: 36),
                 const SizedBox(width: 10),
-                Expanded(child: Text('${s['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Ty.body(w: FontWeight.w600))),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${s['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Ty.body(w: FontWeight.w600)),
+                  if ('${s['admission_no'] ?? ''}'.isNotEmpty) Text('${s['admission_no']}', maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: Ty.custom(12, FontWeight.w500, c: color.muted)),
+                ])),
                 for (final m in const ['present', 'late', 'absent'])
                   Padding(
                     padding: const EdgeInsets.only(left: 6),
@@ -175,24 +215,59 @@ class TeacherScores extends StatefulWidget {
 
 class _TeacherScoresState extends State<TeacherScores> {
   String? _class, _subject, _component;
+  bool _form = false;
 
   @override
   Widget build(BuildContext context) => LoadView(
         path: 'teacher/scores',
         query: {'class': _class, 'subject': _subject, 'component': _component},
-        builder: (context, d, reload) => _ScoresBody(
-          data: d,
-          reload: reload,
-          pick: (c, s) => setState(() { _class = c; _subject = s; }),
-        ),
+        builder: (context, d, reload) {
+          if (_form) return _ScoresBody(data: d, reload: reload, change: () => setState(() => _form = false));
+          return _ScoresPick(
+            data: d,
+            reload: reload,
+            pick: (c, s, k) => setState(() { _class = c; _subject = s; _component = k; }),
+            go: () => setState(() => _form = true),
+          );
+        },
       );
+}
+
+/// The step before the student list: the class, the subject and the exam, then Continue.
+class _ScoresPick extends StatelessWidget {
+  final dynamic data;
+  final Future<void> Function() reload;
+  final void Function(String? cls, String? subject, String? component) pick;
+  final VoidCallback go;
+  const _ScoresPick({required this.data, required this.reload, required this.pick, required this.go});
+
+  @override
+  Widget build(BuildContext context) {
+    final options = _l(data['options']);
+    final cls = '${data['class']['id']}';
+    final seen = <String>{};
+    final classes = [for (final o in options) if (seen.add('${o['class_id']}')) o];
+    final subjects = [for (final o in options) if ('${o['class_id']}' == cls) o];
+    final comps = _l(data['components']);
+    final comp = data['component'];
+    return Screen(onRefresh: reload, children: [
+      const PageTitle('Enter scores', sub: 'Choose the class, the subject and the exam, then continue to the student list.'),
+      ECard(title: 'Which scores?', icon: 'options-outline', gap: 14, children: [
+        PickGroup('Class', Chips<String>(value: cls, onChange: (v) => pick(v, null, '${comp['key']}'), options: [for (final o in classes) (value: '${o['class_id']}', label: '${o['class']}')])),
+        PickGroup('Subject', Chips<String>(value: '${data['subject']['id']}', onChange: (v) => pick(cls, v, '${comp['key']}'), options: [for (final o in subjects) (value: '${o['subject_id']}', label: '${o['subject']}')])),
+        PickGroup('Exam', Chips<String>(value: '${comp['key']}', onChange: (v) => pick(cls, '${data['subject']['id']}', v), options: [for (final k in comps) (value: '${k['key']}', label: '${k['short']}')])),
+        Muted(comp['open'] == true ? 'Open for entry${comp['due'] != null ? ', due ${comp['due']}' : ''}.' : 'Not open for entry yet. You can still look at the list.'),
+      ]),
+      AppButton('Continue', icon: 'arrow-forward', onPressed: go),
+    ]);
+  }
 }
 
 class _ScoresBody extends StatefulWidget {
   final dynamic data;
   final Future<void> Function() reload;
-  final void Function(String cls, String subject) pick;
-  const _ScoresBody({required this.data, required this.reload, required this.pick});
+  final VoidCallback change;
+  const _ScoresBody({required this.data, required this.reload, required this.change});
   @override
   State<_ScoresBody> createState() => _ScoresBodyState();
 }
@@ -254,8 +329,6 @@ class _ScoresBodyState extends State<_ScoresBody> {
     final open = comp['open'] == true && d['locked'] != true;
     final entered = _c.values.where((c) => c.text.trim().isNotEmpty).length;
     final total = (d['total'] as num);
-    final options = _l(d['options']);
-    final current = '${d['class']['id']}|${d['subject']['id']}';
     return Screen(
       onRefresh: widget.reload,
       footer: open
@@ -267,21 +340,12 @@ class _ScoresBodyState extends State<_ScoresBody> {
           : null,
       children: [
         PageTitle('Enter scores', sub: '${d['class']['name']} · ${d['subject']['name']}'),
-        if (options.length > 1)
-          Chips<String>(
-            value: current,
-            onChange: (v) {
-              final o = options.cast<dynamic>().where((x) => '${x['class_id']}|${x['subject_id']}' == v).firstOrNull;
-              if (o != null) widget.pick('${o['class_id']}', '${o['subject_id']}');
-            },
-            options: [for (final o in options) (value: '${o['class_id']}|${o['subject_id']}', label: '${o['class']} · ${o['subject']}')],
-          ),
+        ChangeBar(summary: '${d['class']['name']} · ${d['subject']['name']} · ${comp['short']}', onChange: widget.change),
         if (d['decline_note'] != null) ECard(title: 'Sent back by School Admin', icon: 'return-up-back-outline', children: [Text('${d['decline_note']}', style: Ty.body())]),
         ECard(
-          title: '${comp['label']}',
+          title: '${comp['short']}',
           icon: 'create-outline',
-          right: Pill(d['locked'] == true ? 'Submitted' : open ? 'Open · due ${comp['due']}' : 'Not open', toneName: d['locked'] == true ? 'blue' : open ? 'green' : 'grey'),
-          children: [Muted('$entered of ${d['total']} entered'), Bar(total > 0 ? entered / total * 100 : 0, height: 6)],
+          children: [Align(alignment: Alignment.centerLeft, child: Pill(d['locked'] == true ? 'Submitted' : open ? 'Open · due ${comp['due']}' : 'Not open', toneName: d['locked'] == true ? 'blue' : open ? 'green' : 'grey')), Muted('Out of ${comp['max']} · $entered of ${d['total']} entered'), Bar(total > 0 ? entered / total * 100 : 0, height: 6)],
         ),
         ListGroup([
           for (final r in _l(d['rows']))
@@ -289,7 +353,10 @@ class _ScoresBodyState extends State<_ScoresBody> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: Row(children: [
                 SizedBox(width: 24, child: Text('${r['no']}', style: Ty.custom(14, FontWeight.w700, c: color.muted))),
-                Expanded(child: Text('${r['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Ty.body(w: FontWeight.w600))),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${r['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Ty.body(w: FontWeight.w600)),
+                  if ('${r['admission_no'] ?? ''}'.isNotEmpty) Text('Adm. no. ${r['admission_no']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Ty.small()),
+                ])),
                 SizedBox(
                   width: 80,
                   child: TextField(

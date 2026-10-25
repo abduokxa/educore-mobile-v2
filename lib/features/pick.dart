@@ -100,3 +100,42 @@ class _PickGateState extends State<PickGate> {
     );
   }
 }
+
+/// A line under a page title saying what is shown, with a button back to the choose-then-continue form.
+class ChangeBar extends StatelessWidget {
+  final String summary, label;
+  final VoidCallback onChange;
+  const ChangeBar({super.key, required this.summary, required this.onChange, this.label = 'Change'});
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        Icn('options-outline', size: 16, tint: color.muted),
+        const SizedBox(width: 8),
+        Expanded(child: Text(summary, maxLines: 2, overflow: TextOverflow.ellipsis, style: Ty.small(w: FontWeight.w600))),
+        Tap(
+          label: label,
+          onTap: onChange,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 36),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(color: color.tint, borderRadius: BorderRadius.circular(18)),
+            alignment: Alignment.center,
+            child: Text('Change', style: Ty.custom(13, FontWeight.w800, c: color.brand)),
+          ),
+        ),
+      ]);
+}
+
+/// A labelled group on a pick form.
+class PickGroup extends StatelessWidget {
+  final String label;
+  final Widget child;
+  const PickGroup(this.label, this.child, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: Ty.small(w: FontWeight.w700)),
+        const SizedBox(height: 8),
+        child,
+      ]);
+}

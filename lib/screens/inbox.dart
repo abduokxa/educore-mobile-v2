@@ -21,6 +21,8 @@ String targetFor(String href) {
     '/parent/calendar': 'page:calendar', '/student/calendar': 'page:calendar', '/teacher/calendar': 'page:calendar',
     '/parent/transport': 'page:transport', '/parent/boarding': 'page:boarding', '/parent/notifications': 'page:notice-settings',
     '/teacher/payslips': 'page:payslips', '/teacher/leave': 'page:leave',
+    '/bursar': 'Today', '/bursar/defaulters': 'Owing', '/bursar/payments': 'Payments', '/bursar/payment': 'Payments', '/bursar/invoices': 'Bills',
+    '/bursar/payslips': 'page:payslips', '/bursar/leave': 'page:leave', '/bursar/calendar': 'page:calendar',
   };
   if (exact.containsKey(path)) return exact[path]!;
   if (path.startsWith('/student/learn') || path.startsWith('/teacher/learning')) return 'Learn';

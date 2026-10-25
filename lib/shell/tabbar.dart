@@ -6,7 +6,7 @@ import 'nav.dart';
 const _icons = <String, (String, String)>{
   'Home': ('home-outline', 'home'), 'Fees': ('wallet-outline', 'wallet'), 'Results': ('ribbon-outline', 'ribbon'), 'Attendance': ('checkmark-done-outline', 'checkmark-done'),
   'Notices': ('notifications-outline', 'notifications'), 'Account': ('person-outline', 'person'), 'Learn': ('book-outline', 'book'), 'Tests': ('document-text-outline', 'document-text'),
-  'My day': ('today-outline', 'today'), 'Register': ('clipboard-outline', 'clipboard'), 'Scores': ('create-outline', 'create'), 'Today': ('today-outline', 'today'),
+  'My day': ('today-outline', 'today'), 'Register': ('clipboard-outline', 'clipboard'), 'Scores': ('create-outline', 'create'), 'Today': ('today-outline', 'today'), 'Owing': ('people-outline', 'people'), 'Payments': ('cash-outline', 'cash'), 'Bills': ('document-text-outline', 'document-text'),
 };
 
 /// The outline icon of a tab, for the side menu.

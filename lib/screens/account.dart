@@ -75,8 +75,8 @@ class RolePicker extends StatelessWidget {
   const RolePicker({super.key, required this.session, required this.onPick});
   @override
   Widget build(BuildContext context) {
-    const icons = {'parent': 'people-outline', 'teacher': 'school-outline', 'student': 'happy-outline'};
-    final roles = (session['roles'] as List).where((r) => const ['parent', 'teacher', 'student'].contains(r['workspace'])).toList();
+    const icons = {'parent': 'people-outline', 'teacher': 'school-outline', 'student': 'happy-outline', 'bursar': 'wallet-outline'};
+    final roles = (session['roles'] as List).where((r) => const ['parent', 'teacher', 'student', 'bursar'].contains(r['workspace'])).toList();
     return Screen(bare: true, children: [
       const SizedBox(height: 28),
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

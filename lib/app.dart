@@ -15,6 +15,7 @@ import 'features/push.dart';
 import 'features/termsheet.dart';
 import 'features/version.dart';
 import 'screens/account.dart';
+import 'screens/bursar.dart';
 import 'screens/exams.dart';
 import 'screens/extras.dart';
 import 'screens/learning.dart';
@@ -82,7 +83,14 @@ List<MoreItem> _studentMore(Session s) => _menu(s, [
       ('school_calendar', MoreItem('calendar', 'School calendar', 'Term dates and events', (_) => const CalendarScreen())),
     ]);
 
-List<MoreItem> _moreFor(Session s, String ws) => ws == 'parent' ? _parentMore(s) : ws == 'teacher' ? _teacherMore(s) : _studentMore(s);
+List<MoreItem> _bursarMore(Session s) => _menu(s, [
+      ('fees', MoreItem('help', 'Help', 'How things work', (_) => const HelpDocs())),
+      ('leave', MoreItem('leave', 'Leave', 'Ask for leave and see decisions', (_) => const TeacherLeave())),
+      ('payroll', MoreItem('payslips', 'Payslips', 'Your pay history', (_) => const TeacherPayslips())),
+      ('school_calendar', MoreItem('calendar', 'School calendar', 'Term dates and events', (_) => const CalendarScreen())),
+    ]);
+
+List<MoreItem> _moreFor(Session s, String ws) => ws == 'parent' ? _parentMore(s) : ws == 'teacher' ? _teacherMore(s) : ws == 'bursar' ? _bursarMore(s) : _studentMore(s);
 
 class EducoreApp extends StatefulWidget {
   const EducoreApp({super.key});
@@ -180,7 +188,7 @@ class _EducoreAppState extends State<EducoreApp> {
     if (key == _wsSeen) return;
     _wsSeen = key;
     final s = _session;
-    if (s == null || ws == null || !const ['parent', 'teacher', 'student'].contains(ws)) {
+    if (s == null || ws == null || !const ['parent', 'teacher', 'student', 'bursar'].contains(ws)) {
       Terms.I.reset();
       Nav.I.setTabs(const []);
       _links?.cancel();
@@ -190,6 +198,7 @@ class _EducoreAppState extends State<EducoreApp> {
     Nav.I.setTabs(switch (ws) {
       'parent' => ['Home', if (_on(s, 'fees')) 'Fees', if (_on(s, 'exams')) 'Results', if (_on(s, 'attendance')) 'Attendance', 'Notices', 'Account'],
       'teacher' => ['My day', if (_on(s, 'attendance')) 'Register', if (_on(s, 'exams')) 'Scores', if (_feature(s, 'lms.enabled')) 'Learn', 'Notices', 'Account'],
+      'bursar' => [if (_feature(s, 'fees')) ...['Today', 'Owing', 'Payments', 'Bills'], 'Notices', 'Account'],
       _ => ['Today', if (_feature(s, 'lms.enabled')) 'Learn', if (_feature(s, 'online_tests')) 'Tests', if (_on(s, 'exams')) 'Results', 'Notices', 'Account'],
     }, role: ws, pages: [for (final i in _moreFor(s, ws)) i.key]);
     Unread.I.load();
@@ -198,6 +207,7 @@ class _EducoreAppState extends State<EducoreApp> {
     warm(switch (ws) {
       'parent' => ['parent/home', 'parent/fees', 'parent/results', 'parent/attendance', 'inbox', 'parent/notices'],
       'teacher' => ['teacher/home', 'teacher/register', 'teacher/scores', 'inbox'],
+      'bursar' => ['bursar', 'inbox'],
       _ => ['student/home', 'student/results', 'inbox', 'student/notices'],
     });
     // Setting up notifications can wait until the first screen is showing.
@@ -224,7 +234,7 @@ class _EducoreAppState extends State<EducoreApp> {
     _links?.cancel();
     final links = AppLinks();
     void open(Uri u) {
-      final m = RegExp(r'^https?://[^/]+(/(?:parent|student|teacher)(?:/[A-Za-z0-9_\-/]*)?(?:\?[^#]*)?)').firstMatch(u.toString());
+      final m = RegExp(r'^https?://[^/]+(/(?:parent|student|teacher|bursar)(?:/[A-Za-z0-9_\-/]*)?(?:\?[^#]*)?)').firstMatch(u.toString());
       if (m != null) _openHref(m.group(1));
     }
 
@@ -299,7 +309,7 @@ class _EducoreAppState extends State<EducoreApp> {
     final s = _session;
     final ws = _ws;
     final school = s?['school'] as Map?;
-    final inRole = s != null && ws != null && const ['parent', 'teacher', 'student'].contains(ws);
+    final inRole = s != null && ws != null && const ['parent', 'teacher', 'student', 'bursar'].contains(ws);
     final chrome = ChromeData(
       school: school?['name'] as String?,
       logo: school?['has_logo'] == true ? '${baseUrl()}/api/school/logo' : null,
@@ -314,7 +324,7 @@ class _EducoreAppState extends State<EducoreApp> {
       body = Login(onSession: _setSession, onBrand: (hex) => setState(() => _previewBrand = hex));
     } else if (ws == null) {
       body = RolePicker(session: s, onPick: _setSession);
-    } else if (const ['parent', 'teacher', 'student'].contains(ws)) {
+    } else if (const ['parent', 'teacher', 'student', 'bursar'].contains(ws)) {
       body = _RoleShell(
         key: ValueKey(ws),
         session: s,
@@ -327,7 +337,7 @@ class _EducoreAppState extends State<EducoreApp> {
       body = Screen(bare: true, children: [
         const SizedBox(height: 40),
         const H1('Use the web app'),
-        const Muted('Your role works on the school website. This app is for parents, teachers and students.'),
+        const Muted('Your role works on the school website. This app is for parents, teachers, students and bursars.'),
         AppButton('Sign out', kind: BtnKind.plain, icon: 'log-out-outline', onPressed: _signOut),
       ]);
     }
@@ -400,7 +410,10 @@ class _RoleShellState extends State<_RoleShell> {
       case 'My day': return const TeacherHome();
       case 'Register': return const TeacherRegister();
       case 'Scores': return const TeacherScores();
-      case 'Today': return const StudentHome();
+      case 'Today': return widget.ws == 'bursar' ? const BursarHome() : const StudentHome();
+      case 'Owing': return const BursarOwing();
+      case 'Payments': return const BursarPayments();
+      case 'Bills': return const BursarBills();
       case 'Learn': return widget.ws == 'teacher' ? const TeacherLearn() : const StudentLearn();
       case 'Tests': return const StudentTests();
       case 'Account':

@@ -1,8 +1,10 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api.dart';
 import '../core/net.dart';
+import '../core/offline.dart';
 import '../features/docs.dart';
 import '../shell/nav.dart';
 import '../ui/ui.dart';
@@ -144,11 +146,42 @@ class _PagedState extends State<_Paged> {
       });
     } catch (e) {
       if (!mounted || mine != _token) return;
+      // No signal and a search typed: look through the pages saved on the phone instead.
+      if (e is ApiError && e.status == 0 && _q.text.trim().isNotEmpty) {
+        final found = await _searchSaved(_q.text.trim().toLowerCase());
+        if (!mounted || mine != _token) return;
+        setState(() {
+          _rows
+            ..clear()
+            ..addAll(found);
+          _page = 1;
+          _last = 1;
+          _busy = false;
+        });
+        return;
+      }
       setState(() {
         _busy = false;
         _error = e is ApiError ? e.message : 'Something went wrong.';
       });
     }
+  }
+
+  /// The saved pages of this list (the same ones the quiet background save keeps), filtered on the phone.
+  Future<List<Map>> _searchSaved(String q) async {
+    final out = <Map>[];
+    for (var n = 1; n <= 8; n++) {
+      try {
+        final d = await api(widget.path, query: {'page': '$n', 'per_page': '15', if (widget.tabs.isNotEmpty) 'tab': _tab}) as Map;
+        for (final r in _l(d['data'])) {
+          if ((r as Map).values.where((v) => v is String || v is num).join(' ').toLowerCase().contains(q)) out.add(Map.from(r));
+        }
+        if (n >= ((d['meta'] as Map)['last_page'] as num)) break;
+      } catch (_) {
+        break;
+      }
+    }
+    return out;
   }
 
   Future<void> _reload() => _load(reset: true);
@@ -244,7 +277,10 @@ class BursarPayments extends StatelessWidget {
         title: 'Payments',
         sub: 'Everything received this term, with its receipt.',
         empty: 'No payments yet',
-        top: [Builder(builder: (context) => AppButton('Record a payment', icon: 'add-circle-outline', onPressed: () => _recordPayment(context, () async => Refresh.I.bump())))],
+        top: [
+          Builder(builder: (context) => AppButton('Record a payment', icon: 'add-circle-outline', onPressed: () => _recordPayment(context, () async => Refresh.I.bump()))),
+          const _Drafts(),
+        ],
         row: (context, r, reload) => ListRow(
           icon: r['needs_confirm'] == true ? 'time-outline' : 'receipt-outline',
           title: '${r['student']}',
@@ -256,6 +292,60 @@ class BursarPayments extends StatelessWidget {
           onPress: () => showAppSheet<void>(context, title: '${r['student']}', builder: (_) => _PaymentSheet(row: r, onDone: reload)),
         ),
       );
+}
+
+/// Payments taken with no signal. They are kept on the phone and sent by themselves as soon as there is a connection; nothing is
+/// shown as paid, and no receipt exists, until the school has them.
+class _Drafts extends StatefulWidget {
+  const _Drafts();
+  @override
+  State<_Drafts> createState() => _DraftsState();
+}
+
+class _DraftsState extends State<_Drafts> {
+  List<Queued> _rows = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    Offline.I.addListener(_read);
+    _read();
+  }
+
+  @override
+  void dispose() {
+    Offline.I.removeListener(_read);
+    super.dispose();
+  }
+
+  Future<void> _read() async {
+    final r = await Offline.I.waiting('payments');
+    if (mounted) setState(() => _rows = r);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_rows.isEmpty) return const SizedBox.shrink();
+    return ECard(title: 'Not sent to the school yet', icon: 'time-outline', right: Pill('${_rows.length}', toneName: 'amber'), children: [
+      Muted('Saved on this phone. ${Offline.I.background ? 'They are sent by themselves as soon as there is a connection, even if the app is closed.' : 'They are sent when you open the app with a connection.'} There is no receipt until the school has them.'),
+      for (final q in _rows)
+        LR(
+          left: TwoLine(q.label ?? 'Payment', 'Taken ${ago(DateTime.fromMillisecondsSinceEpoch(q.at))}'),
+          right: Tap(
+            label: 'Remove this saved payment',
+            onTap: () async {
+              if (!await confirm(context, title: 'Remove this saved payment?', message: '${q.label ?? ''} has not been sent. It will not be recorded.', yes: 'Remove', destructive: true)) return;
+              await Offline.I.discard(q.id);
+            },
+            child: Padding(padding: const EdgeInsets.all(8), child: Icn('trash-outline', size: 20, tint: color.danger)),
+          ),
+        ),
+      if (Net.I.online) AppButton('Send now', kind: BtnKind.soft, icon: 'cloud-upload-outline', onPressed: () async {
+        final n = await syncOutbox();
+        notify.ok(n > 0 ? '$n sent to the school' : 'Nothing was sent. Check the connection.');
+      }),
+    ]);
+  }
 }
 
 class _PaymentSheet extends StatelessWidget {
@@ -378,6 +468,8 @@ class _RecordPaymentState extends State<_RecordPayment> {
   String _method = 'cash', _date = formatDate(DateTime.now());
   bool _notify = true, _looking = false;
   int _token = 0;
+  // The same key goes with every attempt to send this payment, so the school records it once however many times it is sent.
+  final String _key = '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
 
   @override
   void initState() {
@@ -420,9 +512,39 @@ class _RecordPaymentState extends State<_RecordPayment> {
         _found = r;
         _looking = false;
       });
-    } catch (_) {
-      if (mounted && mine == _token) setState(() => _looking = false);
+    } catch (e) {
+      if (!mounted || mine != _token) return;
+      // No signal: the students on the saved lists (who owes, and the bills) are searched on the phone.
+      final found = e is ApiError && e.status == 0 ? await _savedStudents(q.trim().toLowerCase()) : const [];
+      if (mounted && mine == _token) {
+        setState(() {
+          _found = found;
+          _looking = false;
+        });
+      }
     }
+  }
+
+  /// Students with an open bill, from the pages saved for offline use, in the shape the lookup gives.
+  Future<List> _savedStudents(String q) async {
+    final out = <String, Map>{};
+    for (final path in const ['defaulters', 'invoices']) {
+      for (var n = 1; n <= 8; n++) {
+        try {
+          final d = await api(path, query: {'page': '$n', 'per_page': '15', 'tab': 'all'}) as Map;
+          for (final r in _l(d['data'])) {
+            final bal = (r['balance'] as num?) ?? 0;
+            if (bal > 0 && '${r['student']} ${r['class'] ?? ''}'.toLowerCase().contains(q)) {
+              out.putIfAbsent('${r['id']}', () => {'name': r['student'], 'class': r['class'], 'guardian': r['guardian'], 'invoice': {'id': r['id'], 'balance': bal}});
+            }
+          }
+          if (n >= ((d['meta'] as Map)['last_page'] as num)) break;
+        } catch (_) {
+          break;
+        }
+      }
+    }
+    return out.values.take(8).toList();
   }
 
   bool get _needsRef => _method == 'bank_transfer' || _method == 'cheque';
@@ -475,7 +597,8 @@ class _RecordPaymentState extends State<_RecordPayment> {
           const SizedBox(height: 14),
           AppButton('Save payment', icon: 'checkmark', disabled: !_ready, onPressed: () async {
             try {
-              final r = await api('payments', method: 'POST', body: {
+              final r = await api('payments', method: 'POST', label: '${naira((double.parse(_amount.text.replaceAll(',', '')) * 100).round())} from ${_from.text.trim()} for $_student', body: {
+                'client_key': _key,
                 'invoice': _invoice,
                 'amount': _amount.text.replaceAll(',', ''),
                 'method': _method,
@@ -485,7 +608,11 @@ class _RecordPaymentState extends State<_RecordPayment> {
                 'notify': _notify,
                 'confirmed': true,
               });
-              notify.ok('${r['message']}');
+              if (r is Map && r['queued'] == true) {
+                notify.ok('Saved on this phone', Offline.I.background ? 'No signal. It will be sent to the school by itself, even if the app is closed.' : 'No signal. It will be sent when you open the app with a connection.');
+              } else {
+                notify.ok('${r['message']}');
+              }
               if (context.mounted) Navigator.pop(context);
               await widget.onDone();
               Refresh.I.bump();

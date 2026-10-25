@@ -3,6 +3,9 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/api.dart';
+import 'core/background.dart';
+import 'core/docstore.dart';
+import 'core/prefetch.dart';
 import 'core/entitle.dart';
 import 'core/words.dart';
 import 'core/net.dart';
@@ -118,7 +121,9 @@ class _EducoreAppState extends State<EducoreApp> {
     _update.addListener(_rebuild);
     PushService.init(onOpen: _openHref);
     Net.I; // start watching the connection
-    Refresh.I;
+    Net.I.addListener(_netChanged);
+    Refresh.I.addListener(_saveForOffline);
+    BackgroundSync.init();
     _boot();
   }
 
@@ -128,8 +133,24 @@ class _EducoreAppState extends State<EducoreApp> {
     _changed.value++;
   }
 
+  /// The connection came back: what was saved on the phone is sent, and the offline copies are brought up to date, with no screen involved.
+  void _netChanged() {
+    if (!Net.I.online || _ws == null) return;
+    unawaited(syncOutbox());
+    _saveForOffline();
+  }
+
+  /// Quietly refresh what is kept for offline use. Skipped when it ran recently, so calling it often costs nothing.
+  void _saveForOffline() {
+    final ws = _ws;
+    if (ws == null || !const ['parent', 'teacher', 'student', 'bursar'].contains(ws) || !Net.I.online) return;
+    unawaited(Prefetch.run(role: ws));
+  }
+
   @override
   void dispose() {
+    Net.I.removeListener(_netChanged);
+    Refresh.I.removeListener(_saveForOffline);
     _changed.dispose();
     _lock.dispose();
     _update.dispose();
@@ -175,7 +196,9 @@ class _EducoreAppState extends State<EducoreApp> {
     if (s != null) {
       rememberSession(s);
       final off = _feature(s, 'offline_mobile');
-      Offline.I.setEnabled(off, currentAddress());
+      Offline.I.setEnabled(off, currentAddress(), docs: _feature(s, 'offline_mobile.documents'), background: _feature(s, 'offline_mobile.background'), payments: _feature(s, 'offline_mobile.payments'));
+      // The owner may have switched background sync off for this school since last time.
+      if (!_feature(s, 'offline_mobile.background')) BackgroundSync.stop();
       if (off) syncOutbox();
     }
     _onWorkspace();
@@ -212,6 +235,9 @@ class _EducoreAppState extends State<EducoreApp> {
     });
     // Setting up notifications can wait until the first screen is showing.
     Future<void>.delayed(const Duration(seconds: 3), PushService.register);
+    // Offline copies are saved behind the screens, and the phone's own schedule keeps them fresh and sends saved work, app open or not.
+    BackgroundSync.start();
+    Future<void>.delayed(const Duration(seconds: 6), _saveForOffline);
     _listenForLinks();
   }
 
@@ -243,6 +269,10 @@ class _EducoreAppState extends State<EducoreApp> {
   }
 
   Future<void> _signOut() async {
+    await BackgroundSync.stop();
+    // Nothing of this person's stays on the phone: saved screens, documents and anything not yet sent.
+    await Offline.I.wipe();
+    await DocStore.clear();
     await clearSession();
     _lock.unlock();
     _setSession(null);

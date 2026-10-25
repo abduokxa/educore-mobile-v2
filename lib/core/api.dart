@@ -220,9 +220,10 @@ Future<void> warm(List<String> paths) async {
 /// The last time a screen showed a saved copy instead of fresh data (null when the last load was live).
 int? lastStaleAt;
 
-Future<dynamic> api(String path, {String method = 'GET', Map<String, String?>? query, dynamic body}) {
+/// [label] says in a few words what a write is, shown if it has to wait for a connection.
+Future<dynamic> api(String path, {String method = 'GET', Map<String, String?>? query, dynamic body, String? label}) {
   final qs = _queryString(query);
-  if (method != 'GET') return _request(path, method, body, qs);
+  if (method != 'GET') return _request(path, method, body, qs, label);
   final key = _memKey(path, qs);
   final running = _flying[key];
   if (running != null) return running;
@@ -239,7 +240,7 @@ dynamic _decode(http.Response res) {
   return jsonDecode(utf8.decode(res.bodyBytes));
 }
 
-Future<dynamic> _request(String path, String method, dynamic body, String qs) async {
+Future<dynamic> _request(String path, String method, dynamic body, String qs, [String? label]) async {
   http.Response res;
   try {
     res = await _sendWithRetry(path, method, body, qs);
@@ -256,7 +257,7 @@ Future<dynamic> _request(String path, String method, dynamic body, String qs) as
       }
     }
     if (off.canQueue(path, method)) {
-      await off.enqueue(path, method, body);
+      await off.enqueue(path, method, body, label: label);
       return {'ok': true, 'queued': true, 'message': 'Saved on this phone. It will be sent when you are back online.'};
     }
     throw ApiError(0, 'You seem to be offline. Check your connection and try again.');
@@ -318,8 +319,8 @@ Future<dynamic> apiUpload(String path, {Map<String, String> fields = const {}, S
 }
 
 /// Send what was saved while offline. Called when a request succeeds, so it runs as soon as there is signal.
-Future<int> syncOutbox() {
-  return Offline.I.flush((q) async {
+Future<int> syncOutbox() async {
+  final sent = await Offline.I.flush((q) async {
     try {
       final res = await _send(q.path, q.method, q.body, '');
       if (res.statusCode >= 200 && res.statusCode < 300) return Sent();
@@ -330,11 +331,20 @@ Future<int> syncOutbox() {
       } catch (_) {}
       if (res.statusCode >= 500 || res.statusCode == 429) return StillOffline();
       final when = DateTime.fromMillisecondsSinceEpoch(q.at);
-      return Refused('${q.path.replaceFirst('teacher/', '')} saved offline on ${when.day}/${when.month}/${when.year} was not accepted: $msg');
+      final what = q.label != null ? 'Payment of ${q.label}' : q.path.replaceFirst('teacher/', '');
+      return Refused('$what saved offline on ${when.day}/${when.month}/${when.year} was not accepted: $msg');
     } catch (_) {
       return StillOffline();
     }
   });
+  if (sent > 0) {
+    // What was waiting is now on the school's side, so every open screen asks again.
+    _memory.clear();
+    try {
+      Refresh.I.bump();
+    } catch (_) {/* no screens in the background */}
+  }
+  return sent;
 }
 
 /// Money is kept in kobo. "₦12,500" or "₦12,500.50".

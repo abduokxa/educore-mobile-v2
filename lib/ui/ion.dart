@@ -4,6 +4,7 @@ import 'package:ionicons/ionicons.dart';
 
 const Map<String, IconData> _ion = {
   'menu-outline': Ionicons.menuOutline,
+  'cloud-upload-outline': Ionicons.cloudUploadOutline,
   'cash': Ionicons.cash,
   'cash-outline': Ionicons.cashOutline,
   'call-outline': Ionicons.callOutline,

@@ -114,7 +114,7 @@ class _OfflineBannerState extends State<OfflineBanner> {
         Padding(padding: const EdgeInsets.only(top: 1, right: 10), child: Icn('cloud-offline-outline', size: 20, tint: warn.fg)),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (when != null) Text('You are offline. This is what was saved on ${when.day}/${when.month}/${when.year} ${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}.', style: Ty.custom(13.5, FontWeight.w600, c: warn.fg)),
+            if (when != null) Text('You are offline. This is what was saved ${ago(when)} (${when.day}/${when.month}/${when.year} ${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}).', style: Ty.custom(13.5, FontWeight.w600, c: warn.fg)),
             if (_waiting > 0) Text('$_waiting saved on this phone, waiting to be sent when you are back online.', style: Ty.custom(13.5, FontWeight.w600, c: warn.fg)),
             for (final n in _notes) Text(n, style: Ty.small(c: color.danger)),
           ]),

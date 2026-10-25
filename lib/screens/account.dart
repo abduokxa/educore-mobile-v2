@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../features/offline_card.dart';
 import '../core/api.dart';
+import '../core/offline.dart';
 import '../features/account_data.dart';
 import '../features/lock.dart';
 import '../features/push.dart';
@@ -40,6 +42,7 @@ class _AccountScreenState extends State<AccountScreen> {
         ]),
       ]),
       const LockCard(),
+      OfflineCard(workspace: widget.workspace),
       DataCard(workspace: widget.workspace, requests: widget.requests),
       ECard(title: 'Appearance', icon: 'color-palette-outline', children: [
         Chips<Mode>(value: widget.mode, onChange: widget.onMode, options: const [(value: Mode.system, label: 'Device'), (value: Mode.light, label: 'Light'), (value: Mode.dark, label: 'Dark')]),
@@ -59,6 +62,12 @@ class _AccountScreenState extends State<AccountScreen> {
             }),
         ]),
       AppButton('Sign out', kind: BtnKind.plain, icon: 'log-out-outline', onPressed: () async {
+        // Signing out removes what is saved on the phone, so anything not yet sent would be lost.
+        final waiting = await Offline.I.pending();
+        if (waiting > 0 && context.mounted) {
+          final go = await confirm(context, title: 'Sign out and lose $waiting saved ${waiting == 1 ? 'item' : 'items'}?', message: 'What you saved on this phone has not reached the school yet. Connect to the internet first, or it will be deleted.', yes: 'Sign out anyway', no: 'Stay signed in', destructive: true);
+          if (!go) return;
+        }
         await PushService.unregister();
         try {
           await api('auth/logout', method: 'POST');

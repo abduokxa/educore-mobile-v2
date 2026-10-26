@@ -42,6 +42,10 @@ class _PayBodyState extends State<_PayBody> {
   final List<int> _picked = [];
   final List<String> _extras = [];
   bool _busy = false;
+  // The exact price the server worked out, per gateway, once the person has asked to review the payment.
+  List<Map<String, dynamic>>? _quotes;
+  String? _quoteId;
+  String _quoteFor = '';
 
   @override
   void initState() {
@@ -92,11 +96,34 @@ class _PayBodyState extends State<_PayBody> {
     }
   }
 
+  String _sig(_Mode choice) => '${choice.name}:${_picked.join(',')}';
+
+  /// Ask the school for the exact total on each payment company. Nothing is charged yet.
+  Future<void> _review(_Mode choice) async {
+    setState(() => _busy = true);
+    try {
+      final body = choice == _Mode.year ? {'plan': 'year'} : choice == _Mode.pick ? {'plan': 'schedules', 'schedules': _picked} : {'plan': 'full'};
+      final r = await api('parent/pay/quote', method: 'POST', body: {'invoice': _d['invoice']['id'], 'method': 'card', ...body});
+      final quotes = [for (final q in (r['quotes'] as List)) Map<String, dynamic>.from(q as Map)];
+      if (mounted) {
+        setState(() {
+          _quotes = quotes;
+          _quoteId = quotes.isEmpty ? null : '${quotes.first['id']}';
+          _quoteFor = _sig(choice);
+        });
+      }
+    } catch (e) {
+      if (mounted) await alertBox(context, 'Could not price the payment', e is ApiError ? e.message : null);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _pay(_Mode choice) async {
     setState(() => _busy = true);
     try {
       final body = choice == _Mode.year ? {'plan': 'year'} : choice == _Mode.pick ? {'plan': 'schedules', 'schedules': _picked} : {'plan': 'full'};
-      final r = await api('parent/pay', method: 'POST', body: {'invoice': _d['invoice']['id'], 'method': 'card', 'app': true, ...body});
+      final r = await api('parent/pay', method: 'POST', body: {'invoice': _d['invoice']['id'], 'method': 'card', 'app': true, ...body, if (_quoteId != null && _quoteFor == _sig(choice)) 'quote': _quoteId});
       // The payment page opens on the web. When it finishes it sends the person back here (educore://payment), and the browser closes by itself.
       try {
         await FlutterWebAuth2.authenticate(url: '${r['checkout_url']}', callbackUrlScheme: 'educore');
@@ -112,6 +139,8 @@ class _PayBodyState extends State<_PayBody> {
       if (mounted) Navigator.pop(context);
       if (widget.root.mounted) await _report(widget.root, st);
     } catch (e) {
+      // The price on screen may be out of date; ask again before trying a second time.
+      if (mounted) setState(() => _quotes = null);
       if (mounted) await alertBox(context, 'Could not start the payment', e is ApiError ? e.message : null);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -190,9 +219,56 @@ class _PayBodyState extends State<_PayBody> {
       if (choice == _Mode.year && year != null) Muted('${(year['bills'] as List).map((b) => '${b['term']} ${naira(b['balance'] as num)}').join(' · ')}. One payment, and a receipt for each term.'),
       if (yearOnly && year == null) const Muted('There is nothing left to pay on this bill.'),
       const SizedBox(height: 16),
-      AppButton(amount > 0 ? 'Pay ${naira(amount)}' : 'Pay', icon: 'card-outline', disabled: !canPay, busy: _busy, onPressed: () => _pay(choice)),
+      if (d['quote'] == true && _quotes != null && _quoteFor == _sig(choice) && _quotes!.isNotEmpty) ...[
+        _Summary(quotes: _quotes!, chosen: _quoteId, onChoose: (id) => setState(() => _quoteId = id)),
+        const SizedBox(height: 12),
+        AppButton('Pay ${naira(_quotes!.firstWhere((q) => '${q['id']}' == _quoteId, orElse: () => _quotes!.first)['total'] as num)}', icon: 'card-outline', disabled: !canPay, busy: _busy, onPressed: () => _pay(choice)),
+      ] else if (d['quote'] == true)
+        AppButton('Review the payment', icon: 'card-outline', disabled: !canPay, busy: _busy, onPressed: () => _review(choice))
+      else
+        AppButton(amount > 0 ? 'Pay ${naira(amount)}' : 'Pay', icon: 'card-outline', disabled: !canPay, busy: _busy, onPressed: () => _pay(choice)),
       const SizedBox(height: 10),
       Text('You will go to a secure payment page.', textAlign: TextAlign.center, style: Ty.small()),
+    ]);
+  }
+}
+
+/// Everything the family will be charged, line by line, before they confirm. The total is the total the payment company is asked for.
+class _Summary extends StatelessWidget {
+  final List<Map<String, dynamic>> quotes;
+  final String? chosen;
+  final void Function(String id) onChoose;
+  const _Summary({required this.quotes, required this.chosen, required this.onChoose});
+
+  @override
+  Widget build(BuildContext context) {
+    final q = quotes.firstWhere((x) => '${x['id']}' == chosen, orElse: () => quotes.first);
+    final lines = (q['lines'] as List).cast<Map>();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Payment summary', style: Ty.h3()),
+      const SizedBox(height: 6),
+      Text('${q['student']} · ${q['admission_no']}', style: Ty.body(w: FontWeight.w600)),
+      Muted([q['school'], q['class'], q['term']].where((x) => x != null).join(' · ')),
+      const SizedBox(height: 8),
+      for (final l in lines)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(children: [Expanded(child: Text('${l['label']}', style: Ty.body())), Text(naira(l['amount'] as num), style: Ty.body())]),
+        ),
+      const Rule(),
+      Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(children: [Expanded(child: Text('Total payable', style: Ty.body(w: FontWeight.w700))), Text(naira(q['total'] as num), style: Ty.h3(size: 18))]),
+      ),
+      if (quotes.length > 1) ...[
+        const SizedBox(height: 10),
+        const Muted('Pay through'),
+        const SizedBox(height: 4),
+        Chips<String>(value: '${q['id']}', onChange: onChoose, options: [for (final x in quotes) (value: '${x['id']}', label: '${x['gateway_name']} ${naira(x['total'] as num)}')]),
+      ],
+      if (q['test_mode'] == true) const Padding(padding: EdgeInsets.only(top: 8), child: Muted('Test mode: no real money is taken.')),
+      const SizedBox(height: 6),
+      Text('This is the exact amount you will be charged.', style: Ty.small()),
     ]);
   }
 }

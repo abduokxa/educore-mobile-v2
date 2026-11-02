@@ -1,0 +1,6 @@
+# Copy to android/key.properties (which Git ignores) and fill in. Never commit the real file, the keystore or the passwords.
+# tool/create-release-keystore.sh writes this file for you.
+storeFile=/home/you/.educore-keys/educore-release.jks
+storePassword=
+keyAlias=educore
+keyPassword=

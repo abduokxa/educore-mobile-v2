@@ -57,6 +57,8 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Test builds only: with no keystore secrets the files are debug-signed on purpose (the Release APK workflow never does this).
+          ALLOW_DEBUG_SIGNING: ${{ env.HAS_KEY == 'true' && 'false' || 'true' }}
         run: |
           [ -z "$KEYSTORE_FILE" ] && unset KEYSTORE_FILE
           flutter build apk --release --dart-define=ROOT_DOMAIN=$ROOT_DOMAIN

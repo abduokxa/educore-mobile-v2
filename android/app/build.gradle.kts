@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -28,23 +30,52 @@ android {
         versionName = flutter.versionName
     }
 
-    // A release build is signed with the upload key when KEYSTORE_* are set (see README); otherwise with the debug key so
-    // `flutter build apk --release` still produces an installable file for testing.
-    val keystore = System.getenv("KEYSTORE_FILE")
+    // Release signing. A production APK is signed with the permanent release keystore, never the debug key.
+    // The keystore and its passwords live outside Git: locally in android/key.properties (see key.properties.example and
+    // tool/create-release-keystore.sh), on GitHub from the KEYSTORE_* variables the workflow fills from repository secrets.
+    val keyProps = Properties().apply {
+        val f = rootProject.file("key.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    fun signingValue(property: String, variable: String): String? =
+        (keyProps.getProperty(property) ?: System.getenv(variable))?.takeIf { it.isNotBlank() }
+    val storePath = signingValue("storeFile", "KEYSTORE_FILE")
+    val storePass = signingValue("storePassword", "KEYSTORE_PASSWORD")
+    val keyAliasName = signingValue("keyAlias", "KEY_ALIAS")
+    val keyPass = signingValue("keyPassword", "KEY_PASSWORD")
+    val hasReleaseKey = storePath != null && storePass != null && keyAliasName != null && keyPass != null
+    // Only a build that says so (the test-only workflow path) may fall back to the debug key.
+    val allowDebugSigning = System.getenv("ALLOW_DEBUG_SIGNING") == "true"
+
     signingConfigs {
-        if (keystore != null) {
-            create("upload") {
-                storeFile = file(keystore)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("KEY_ALIAS")
-                keyPassword = System.getenv("KEY_PASSWORD")
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(storePath!!)
+                storePassword = storePass
+                keyAlias = keyAliasName
+                keyPassword = keyPass
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = if (keystore != null) signingConfigs.getByName("upload") else signingConfigs.getByName("debug")
+            signingConfig = when {
+                hasReleaseKey -> signingConfigs.getByName("release")
+                allowDebugSigning -> signingConfigs.getByName("debug")
+                else -> null
+            }
+        }
+    }
+
+    // A release build with no release keystore stops with a clear message, so a debug-signed file is never mistaken for production.
+    gradle.taskGraph.whenReady {
+        val releasing = allTasks.any { it.project == project && it.name in setOf("assembleRelease", "bundleRelease", "packageRelease") }
+        if (releasing && !hasReleaseKey && !allowDebugSigning) {
+            throw GradleException(
+                "No release keystore found. Create android/key.properties (copy key.properties.example and fill it in, " +
+                    "or run tool/create-release-keystore.sh), or set KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD."
+            )
         }
     }
 }

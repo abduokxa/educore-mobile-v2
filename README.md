@@ -32,6 +32,34 @@ Artifacts: `educore.apk` (to install) and `educore.aab` (for Google Play), each 
 secrets: `ANDROID_KEYSTORE_BASE64` (the `.jks` file, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
 Without them the file is signed with a debug key (fine for testing, not for the store).
 
+### Signed release APK (permanent release keystore)
+
+The production APK is signed with one permanent keystore, `educore-release.jks` (alias `educore`, RSA 4096, valid 10,000 days), kept **outside** this repository.
+Never commit it or its passwords (`.gitignore` blocks `android/key.properties`, `*.jks` and `*.keystore`), and never create a new one for a new release:
+a different key stops phones that already have the app from updating it. A release build with no keystore **stops with an error**; it is never signed with the debug key.
+
+**Once, on your own computer:** `./tool/create-release-keystore.sh` asks for a password (not shown or logged), creates `~/.educore-keys/educore-release.jks`,
+writes `android/key.properties`, and prints the certificate fingerprint. Back the keystore and password up now (password manager plus an offline copy).
+
+**Build on GitHub (recommended).** Add four repository secrets (Settings, Secrets and variables, Actions): `RELEASE_KEYSTORE_BASE64`
+(`base64 -w0 ~/.educore-keys/educore-release.jks`), `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS` (`educore`), `RELEASE_KEY_PASSWORD`.
+Then Actions, **Release APK**, Run workflow (or push a tag such as `v2.0.1`). It runs `flutter clean`, `flutter pub get`, `flutter build apk --release`,
+checks the file with `apksigner verify`, and publishes `app-release.apk` and `app-release.apk.sha256` with the size, package, version and signing fingerprint in the run summary.
+
+**Build on your computer** (with `android/key.properties` in place):
+
+```
+flutter clean
+flutter pub get
+flutter build apk --release
+# the file: build/app/outputs/flutter-apk/app-release.apk
+"$ANDROID_HOME"/build-tools/<version>/apksigner verify --verbose --print-certs build/app/outputs/flutter-apk/app-release.apk
+sha256sum build/app/outputs/flutter-apk/app-release.apk
+```
+
+Each new release: raise `version:` in `pubspec.yaml` (for example `2.0.1+1001`; the number after `+` must go up every time), then build the same way. The application ID stays `ng.educore.app`.
+Upload the APK on the server's *Mobile app* page; the server reads its signing fingerprint and publishes it for app links by itself.
+
 ### Signing for Google Play (the key Play expects)
 
 Play only accepts a bundle signed with the **upload key the app was first published with**. For this app Play expects the certificate

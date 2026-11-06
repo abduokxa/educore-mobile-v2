@@ -70,18 +70,20 @@ jobs:
             cp build/app/outputs/bundle/release/app-release.aab educore-debug-key.aab
             echo "::warning::No signing key secrets are set, so the files are signed with a debug key. Google Play will refuse educore-debug-key.aab; add the keystore secrets (see README) to get a Play-ready educore.aab."
           fi
-      # Say which key signed the files, and stop if the bundle is not signed with the key Google Play expects.
+      # Say which key signed the files. Google Play only takes a bundle signed with the upload key it has on record. After a
+      # successful "Request upload key reset", set the repository variable ANDROID_PLAY_UPLOAD_SHA1 to the new key's SHA1.
+      # A bundle with the wrong key is renamed so it cannot be uploaded by mistake; the APK is still published.
       - name: Check the signing key
         env:
-          EXPECTED_SHA1: "E5:72:C3:27:E6:B3:3F:36:1D:10:3D:25:1C:C5:55:D1:B2:8F:2A:BE"
+          EXPECTED_SHA1: ${{ vars.ANDROID_PLAY_UPLOAD_SHA1 || 'E5:72:C3:27:E6:B3:3F:36:1D:10:3D:25:1C:C5:55:D1:B2:8F:2A:BE' }}
         run: |
           echo "APK signed with:"; keytool -printcert -jarfile educore.apk | grep -E "Owner|SHA1" || true
           if [ -f educore.aab ]; then
             GOT=$(keytool -printcert -jarfile educore.aab | awk '/SHA1:/ {print $2; exit}')
             echo "AAB signed with: $GOT"
             if [ "$GOT" != "$EXPECTED_SHA1" ]; then
-              echo "::error::The bundle is signed with $GOT but Google Play expects $EXPECTED_SHA1. Use the keystore the app was first uploaded with (see README)."
-              exit 1
+              mv educore.aab educore-NOT-FOR-PLAY.aab
+              echo "::warning::The bundle is signed with $GOT but Google Play expects $EXPECTED_SHA1, so it is named educore-NOT-FOR-PLAY.aab. Use the keystore the app was first uploaded with, or ask Play for an upload key reset and then set the repository variable ANDROID_PLAY_UPLOAD_SHA1 to $GOT (see README)."
             fi
           fi
       # Two separate downloads, each the file itself (not zipped): educore.apk to install, educore.aab for Google Play (educore-debug-key.aab if no signing key is set).

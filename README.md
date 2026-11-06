@@ -79,6 +79,13 @@ No old keystore? In Play Console → your app → *Test and release* → *App si
 (`keytool -genkeypair -v -storetype PKCS12 -keystore upload.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000`), upload its
 certificate when Play asks, wait for approval, and use that keystore for the four secrets. Keep the keystore and its passwords safe: they cannot be recovered.
 
+**"The bundle is signed with 7A:64... but Google Play expects E5:72..."** means the keystore in the secrets is a new one, not the one the app was
+first uploaded with. Either put the original keystore in the four secrets (the EAS download above), or keep the new one and ask Play to
+accept it: *App signing* → **Request upload key reset**, with the certificate from
+`keytool -export -rfc -keystore upload.jks -alias <alias> -file upload_cert.pem`. Play takes a day or two to approve. When it does, add a
+repository **variable** (not a secret) `ANDROID_PLAY_UPLOAD_SHA1` with the new key's SHA1 (shown in the build log as "AAB signed with"),
+and run **Build** again. Until then the run still publishes the APK, and the bundle is named `educore-NOT-FOR-PLAY.aab`.
+
 On your own computer: `flutter build apk --release --dart-define=ROOT_DOMAIN=edu-core.ng` (needs the Android SDK), and
 `flutter build appbundle --release ...` for Play. iOS needs a Mac: `flutter build ipa`.
 

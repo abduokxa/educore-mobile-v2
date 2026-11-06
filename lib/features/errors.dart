@@ -1,7 +1,10 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import '../core/api.dart';
 import 'version.dart';
 
+bool _crashlytics = false;
 int _sent = 0;
 final Set<String> _seen = {};
 
@@ -17,14 +20,29 @@ Future<void> reportError(String name, String message, [String? where]) async {
   } catch (_) {}
 }
 
+/// Crash reports to Firebase Crashlytics (release builds only), so crashes the platform could never see (the app closing by itself, native
+/// errors) are visible too. Quiet if Firebase is not set up: the app then still reports through [reportError].
+Future<void> startCrashReporting() async {
+  if (kIsWeb || !kReleaseMode) return;
+  try {
+    await Firebase.initializeApp();
+    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+    _crashlytics = true;
+  } catch (e) {
+    debugPrint('Crashlytics is off: $e');
+  }
+}
+
 /// Catch errors nobody handled, report them, and let the app carry on.
 void startErrorReporting() {
   final previous = FlutterError.onError;
   FlutterError.onError = (details) {
+    if (_crashlytics) FirebaseCrashlytics.instance.recordFlutterFatalError(details);
     reportError(details.exception.runtimeType.toString(), details.exceptionAsString(), details.stack?.toString().split('\n').first);
     previous?.call(details);
   };
   PlatformDispatcher.instance.onError = (error, stack) {
+    if (_crashlytics) FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     reportError(error.runtimeType.toString(), '$error', stack.toString().split('\n').first);
     return kReleaseMode;
   };

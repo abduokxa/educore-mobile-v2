@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api.dart';
 import '../ui/ui.dart';
+import 'play_update.dart';
 
 class VersionRules {
   final String min, latest, storeUrl;
@@ -55,6 +56,7 @@ UpdateState updateState(VersionRules? rules, String version) {
 class UpdateWatcher extends ChangeNotifier with WidgetsBindingObserver {
   UpdateState state = UpdateState.current;
   String url = '';
+  PlayUpdate play = PlayUpdate.none;
   DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
 
   void start() {
@@ -69,6 +71,9 @@ class UpdateWatcher extends ChangeNotifier with WidgetsBindingObserver {
     if (r == null) return;
     state = updateState(r, await appVersion());
     url = r.storeUrl;
+    // Installed from Google Play: the update can happen inside the app, without leaving it.
+    play = await checkPlayUpdate();
+    if (state == UpdateState.current && play.available) state = UpdateState.available; // Play knows of a newer release even if the platform's rules do not yet
     notifyListeners();
   }
 
@@ -83,10 +88,17 @@ Future<void> _open(String url) async {
   if (url.isNotEmpty) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 }
 
+/// Update inside the app when Google Play can do it, otherwise open the download link.
+Future<void> _update(String url, PlayUpdate play, {bool must = false}) async {
+  if (play.available && await startPlayUpdate(play, must: must)) return;
+  await _open(url);
+}
+
 /// Shown instead of the app when this version is too old to work.
 class UpdateRequired extends StatelessWidget {
   final String url;
-  const UpdateRequired({super.key, required this.url});
+  final PlayUpdate play;
+  const UpdateRequired({super.key, required this.url, this.play = PlayUpdate.none});
   @override
   Widget build(BuildContext context) => Container(
         color: color.bg,
@@ -101,7 +113,7 @@ class UpdateRequired extends StatelessWidget {
               const SizedBox(height: 10),
               Text('This version is too old to work with your school any more. It takes a minute, and your information is safe.', textAlign: TextAlign.center, style: Ty.body(c: color.muted)),
               const SizedBox(height: 18),
-              AppButton('Update now', icon: 'arrow-up-circle-outline', onPressed: () => _open(url)),
+              AppButton('Update now', icon: 'arrow-up-circle-outline', onPressed: () => _update(url, play, must: true)),
             ]),
           ),
         ),
@@ -111,7 +123,8 @@ class UpdateRequired extends StatelessWidget {
 /// A quiet line when a newer version exists. It can be dismissed until the app is opened again.
 class UpdateNotice extends StatefulWidget {
   final String url;
-  const UpdateNotice({super.key, required this.url});
+  final PlayUpdate play;
+  const UpdateNotice({super.key, required this.url, this.play = PlayUpdate.none});
   @override
   State<UpdateNotice> createState() => _UpdateNoticeState();
 }
@@ -128,7 +141,7 @@ class _UpdateNoticeState extends State<UpdateNotice> {
         Icn('cloud-download-outline', size: 20, tint: color.card),
         const SizedBox(width: 10),
         Expanded(child: Text('A new version of Educore is ready.', style: Ty.custom(13, FontWeight.w700, c: color.card))),
-        Tap(label: 'Update', onTap: () => _open(widget.url), child: Text('Update', style: Ty.custom(13, FontWeight.w800, c: color.card).copyWith(decoration: TextDecoration.underline))),
+        Tap(label: 'Update', onTap: () => _update(widget.url, widget.play), child: Text('Update', style: Ty.custom(13, FontWeight.w800, c: color.card).copyWith(decoration: TextDecoration.underline))),
         const SizedBox(width: 12),
         Tap(label: 'Dismiss', onTap: () => setState(() => _hide = true), child: Icn('close', size: 18, tint: color.card)),
       ]),

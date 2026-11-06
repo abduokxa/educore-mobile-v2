@@ -3,9 +3,10 @@ import 'package:flutter/services.dart';
 import 'app.dart';
 import 'features/errors.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
   startErrorReporting();
+  await startCrashReporting();
   runApp(const EducoreApp());
 }

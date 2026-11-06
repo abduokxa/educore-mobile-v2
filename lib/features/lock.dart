@@ -5,8 +5,21 @@ import '../ui/ui.dart';
 
 const _key = 'bio_lock';
 
-/// How long the app may sit in the background before it asks again.
-const _away = Duration(seconds: 60);
+const _afterKey = 'bio_lock_after';
+
+/// How long the app may sit in the background before it asks again, unless the person chose another time.
+const defaultAway = Duration(seconds: 60);
+
+/// The times a person can choose from, in seconds (0 asks every time the app is opened again).
+const lockDelays = [0, 60, 300, 900];
+
+/// Has the app been away long enough that it should ask again?
+bool shouldLock(Duration gone, Duration allowed) => gone >= allowed;
+
+Future<Duration> lockAfter() async {
+  final v = int.tryParse(await Secure.get(_afterKey) ?? '');
+  return v != null && lockDelays.contains(v) ? Duration(seconds: v) : defaultAway;
+}
 final LocalAuthentication _auth = LocalAuthentication();
 
 /// Does this phone have a fingerprint, face or screen lock that can unlock the app?
@@ -67,7 +80,7 @@ class AppLock extends ChangeNotifier with WidgetsBindingObserver {
     if (s == AppLifecycleState.resumed) {
       final gone = _left == null ? Duration.zero : DateTime.now().difference(_left!);
       _left = null;
-      if (gone >= _away && await lockEnabled() && await biometricAvailable()) {
+      if (shouldLock(gone, await lockAfter()) && await lockEnabled() && await biometricAvailable()) {
         locked = true;
         notifyListeners();
       }
@@ -133,11 +146,13 @@ class LockCard extends StatefulWidget {
 
 class _LockCardState extends State<LockCard> {
   bool _can = false, _on = false;
+  int _after = defaultAway.inSeconds;
   @override
   void initState() {
     super.initState();
     biometricAvailable().then((v) => mounted ? setState(() => _can = v) : null);
     lockEnabled().then((v) => mounted ? setState(() => _on = v) : null);
+    lockAfter().then((v) => mounted ? setState(() => _after = v.inSeconds) : null);
   }
 
   Future<void> _change(bool on) async {
@@ -150,12 +165,21 @@ class _LockCardState extends State<LockCard> {
     notify.ok(on ? 'App lock is on' : 'App lock is off');
   }
 
+  Future<void> _changeAfter(int seconds) async {
+    await Secure.set(_afterKey, '$seconds');
+    if (mounted) setState(() => _after = seconds);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_can) return const SizedBox.shrink();
     return ECard(title: 'App lock', icon: 'finger-print', children: [
-      const Muted('Ask for your fingerprint, face or phone lock when you open Educore, and when you come back to it after a minute away.'),
+      const Muted('Ask for your fingerprint, face or phone lock when you open Educore, and when you come back to it after being away. You choose how long.'),
       Chips<bool>(value: _on, onChange: _change, options: const [(value: false, label: 'Off'), (value: true, label: 'On')]),
+      if (_on) ...[
+        const Muted('Ask again after being away for:'),
+        Chips<int>(value: _after, onChange: _changeAfter, options: const [(value: 0, label: 'Always'), (value: 60, label: '1 min'), (value: 300, label: '5 min'), (value: 900, label: '15 min')]),
+      ],
     ]);
   }
 }

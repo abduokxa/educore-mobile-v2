@@ -335,7 +335,7 @@ class _EducoreAppState extends State<EducoreApp> {
         ),
       );
     }
-    if (_update.state == UpdateState.required) return Scaffold(body: UpdateRequired(url: _update.url));
+    if (_update.state == UpdateState.required) return Scaffold(body: UpdateRequired(url: _update.url, play: _update.play));
     final s = _session;
     final ws = _ws;
     final school = s?['school'] as Map?;
@@ -384,7 +384,7 @@ class _EducoreAppState extends State<EducoreApp> {
         body: Stack(children: [
           Positioned.fill(child: body),
           if (_update.state == UpdateState.available)
-            Positioned(left: 12, right: 12, bottom: 96, child: UpdateNotice(url: _update.url)),
+            Positioned(left: 12, right: 12, bottom: 96, child: UpdateNotice(url: _update.url, play: _update.play)),
           const ConnectivityBanner(),
           if (s != null && _lock.locked) Positioned.fill(child: LockScreen(onUnlock: _lock.unlock, onSignOut: _signOut, school: school?['name'] as String?)),
         ]),

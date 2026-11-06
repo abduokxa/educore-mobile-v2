@@ -70,20 +70,25 @@ jobs:
             cp build/app/outputs/bundle/release/app-release.aab educore-debug-key.aab
             echo "::warning::No signing key secrets are set, so the files are signed with a debug key. Google Play will refuse educore-debug-key.aab; add the keystore secrets (see README) to get a Play-ready educore.aab."
           fi
-      # Say which key signed the files. Google Play only takes a bundle signed with the upload key it has on record. After a
-      # successful "Request upload key reset", set the repository variable ANDROID_PLAY_UPLOAD_SHA1 to the new key's SHA1.
-      # A bundle with the wrong key is renamed so it cannot be uploaded by mistake; the APK is still published.
-      - name: Check the signing key
+      # Say which key signed the files. The bundle keeps the name educore.aab whenever it is signed with YOUR keystore.
+      # Google Play still only takes it if Play has that key on record as the upload key: if the line below says it
+      # differs from the expected key, do "Request upload key reset" in Play Console with upload_cert.pem (also an
+      # artifact of this run), wait for Google to confirm, and upload this same educore.aab. Then set the repository
+      # variable ANDROID_PLAY_UPLOAD_SHA1 to the new key's SHA1 so this warning stops.
+      - name: Check the signing key and export the public certificate
         env:
           EXPECTED_SHA1: ${{ vars.ANDROID_PLAY_UPLOAD_SHA1 || 'E5:72:C3:27:E6:B3:3F:36:1D:10:3D:25:1C:C5:55:D1:B2:8F:2A:BE' }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           echo "APK signed with:"; keytool -printcert -jarfile educore.apk | grep -E "Owner|SHA1" || true
           if [ -f educore.aab ]; then
             GOT=$(keytool -printcert -jarfile educore.aab | awk '/SHA1:/ {print $2; exit}')
             echo "AAB signed with: $GOT"
+            # The public certificate only (no private key): this is the file Play asks for in "Request upload key reset".
+            keytool -export -rfc -keystore "$RUNNER_TEMP/upload.jks" -alias "$KEY_ALIAS" -storepass "$KEYSTORE_PASSWORD" -file upload_cert.pem
             if [ "$GOT" != "$EXPECTED_SHA1" ]; then
-              mv educore.aab educore-NOT-FOR-PLAY.aab
-              echo "::warning::The bundle is signed with $GOT but Google Play expects $EXPECTED_SHA1, so it is named educore-NOT-FOR-PLAY.aab. Use the keystore the app was first uploaded with, or ask Play for an upload key reset and then set the repository variable ANDROID_PLAY_UPLOAD_SHA1 to $GOT (see README)."
+              echo "::warning::The bundle is signed with $GOT but Google Play currently expects $EXPECTED_SHA1. Play will refuse it until you request an upload key reset with upload_cert.pem (see README), then set the repository variable ANDROID_PLAY_UPLOAD_SHA1 to $GOT."
             fi
           fi
       # Two separate downloads, each the file itself (not zipped): educore.apk to install, educore.aab for Google Play (educore-debug-key.aab if no signing key is set).
@@ -97,3 +102,9 @@ jobs:
           path: educore*.aab
           archive: false
           if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: ${{ env.HAS_KEY == 'true' }}
+        with:
+          path: upload_cert.pem
+          archive: false
+          if-no-files-found: warn

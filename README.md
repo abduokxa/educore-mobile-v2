@@ -63,7 +63,7 @@ Upload the APK on the server's *Mobile app* page; the server reads its signing f
 ### Signing for Google Play (the key Play expects)
 
 Play only accepts a bundle signed with the **upload key the app was first published with**. For this app Play expects the certificate
-with SHA1 `E5:72:C3:27:E6:B3:3F:36:1D:10:3D:25:1C:C5:55:D1:B2:8F:2A:BE`. A build without your keystore is signed with a debug key
+with SHA1 `7A:64:2A:10:07:39:96:33:3E:D6:F0:FE:0E:94:99:8A:5C:64:B3:EB`. A build without your keystore is signed with a debug key
 (SHA1 `C9:2A:44:A5:...`, which Play refused), so the workflow now makes only the test APK unless the keystore secrets are set, and it stops
 if the bundle's key is not the expected one.
 
@@ -79,7 +79,7 @@ No old keystore? In Play Console → your app → *Test and release* → *App si
 (`keytool -genkeypair -v -storetype PKCS12 -keystore upload.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000`), upload its
 certificate when Play asks, wait for approval, and use that keystore for the four secrets. Keep the keystore and its passwords safe: they cannot be recovered.
 
-**"The bundle is signed with 7A:64... but Google Play expects E5:72..."** means the keystore in the secrets is a new one, not the one the app was
+**"The bundle is signed with 7A:64... but Google Play expects a different key"** means the keystore in the secrets is a new one, not the one the app was
 first uploaded with. Either put the original keystore in the four secrets (the EAS download above), or keep the new one and ask Play to
 accept it: *App signing* → **Request upload key reset**, with the certificate from
 `keytool -export -rfc -keystore upload.jks -alias <alias> -file upload_cert.pem` (every Build run also publishes it as the artifact `upload_cert.pem`). Play takes a day or two to approve. When it does, add a

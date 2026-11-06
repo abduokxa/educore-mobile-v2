@@ -77,7 +77,7 @@ jobs:
       # variable ANDROID_PLAY_UPLOAD_SHA1 to the new key's SHA1 so this warning stops.
       - name: Check the signing key and export the public certificate
         env:
-          EXPECTED_SHA1: ${{ vars.ANDROID_PLAY_UPLOAD_SHA1 || 'E5:72:C3:27:E6:B3:3F:36:1D:10:3D:25:1C:C5:55:D1:B2:8F:2A:BE' }}
+          EXPECTED_SHA1: ${{ vars.ANDROID_PLAY_UPLOAD_SHA1 || '7A:64:2A:10:07:39:96:33:3E:D6:F0:FE:0E:94:99:8A:5C:64:B3:EB' }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |

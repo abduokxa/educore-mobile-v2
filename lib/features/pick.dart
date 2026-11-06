@@ -71,10 +71,10 @@ class _PickGateState extends State<PickGate> {
       PageTitle(widget.title, sub: 'Choose what you want to see, then continue.'),
       ECard(title: 'What would you like to see?', icon: 'options-outline', gap: 14, children: [
         if (widget.kids && kids.length > 1)
-          _group('Child', Chips<String>(value: '${kid['id']}', onChange: (v) => setState(() => _child = v), options: [for (final k in kids) (value: '${k['id']}', label: '${k['name']}'.split(' ').first)])),
+          _group('Child', Chips<String>(title: 'Child', select: true, value: '${kid['id']}', onChange: (v) => setState(() => _child = v), options: [for (final k in kids) (value: '${k['id']}', label: '${k['name']}')])),
         if (widget.kids && kids.length == 1) _group('Child', Text('${kids.first['name']}', style: Ty.body(w: FontWeight.w700))),
-        _group('Session', Chips<String>(value: s.name, onChange: (v) => setState(() { _session = v; _term = null; }), options: [for (final x in sessions) (value: x.name, label: x.isCurrent ? '${x.name} (current)' : x.name)])),
-        _group('Term', Chips<String>(value: t.id, onChange: (v) => setState(() => _term = v), options: [for (final x in s.terms) (value: x.id, label: x.isCurrent ? '${x.name} (current)' : x.name)])),
+        _group('Session', Chips<String>(title: 'Session', select: true, value: s.name, onChange: (v) => setState(() { _session = v; _term = null; }), options: [for (final x in sessions) (value: x.name, label: x.isCurrent ? '${x.name} (current)' : x.name)])),
+        _group('Term', Chips<String>(title: 'Term', select: true, value: t.id, onChange: (v) => setState(() => _term = v), options: [for (final x in s.terms) (value: x.id, label: x.isCurrent ? '${x.name} (current)' : x.name)])),
       ]),
       AppButton('Continue', icon: 'arrow-forward', disabled: widget.kids && kid == null, onPressed: () => setState(() => _chosen = _make(widget.kids ? '${kid['id']}' : null, widget.kids ? '${kid['name']}' : null, s, t))),
     ]);

@@ -348,7 +348,7 @@ class _NewChatState extends State<_NewChat> {
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('About which child', style: Ty.small(w: FontWeight.w600)),
             const SizedBox(height: 6),
-            Chips<String>(value: _student, onChange: (v) => setState(() => _student = v), options: [for (final s in widget.students) (value: '${s['id']}', label: '${s['name']}')]),
+            Chips<String>(title: 'Student', select: true, value: _student, onChange: (v) => setState(() => _student = v), options: [for (final s in widget.students) (value: '${s['id']}', label: '${s['name']}')]),
           ]),
         Field(icon: 'text-outline', label: 'Subject', controller: _subject, hint: 'What is it about?', maxLength: 120, onChanged: (_) => setState(() {})),
         Field(label: 'Message', controller: _message, hint: 'Write your message', multiline: true, maxLength: 1500, onChanged: (_) => setState(() {})),
@@ -514,7 +514,7 @@ class _BookSlotState extends State<_BookSlot> {
   Widget build(BuildContext context) => ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(18, 0, 18, 14), children: [
         Muted('${widget.slot['teacher']}: ${widget.slot['when']}'),
         const SizedBox(height: 12),
-        if (widget.students.length > 1) ...[Chips<String>(value: _student, onChange: (v) => setState(() => _student = v), options: [for (final x in widget.students) (value: '${x['id']}', label: '${x['name']}')]), const SizedBox(height: 12)],
+        if (widget.students.length > 1) ...[Chips<String>(title: 'Student', select: true, value: _student, onChange: (v) => setState(() => _student = v), options: [for (final x in widget.students) (value: '${x['id']}', label: '${x['name']}')]), const SizedBox(height: 12)],
         Field(label: 'What would you like to talk about? (optional)', controller: _note, multiline: true, maxLength: 300),
         const SizedBox(height: 12),
         AppButton('Book', icon: 'checkmark', onPressed: () async {

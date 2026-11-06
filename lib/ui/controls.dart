@@ -196,38 +196,158 @@ class _FieldState extends State<Field> {
   }
 }
 
-/// Choices in a row that scrolls sideways when there are many: children, terms, filters.
+/// Up to this many choices are shown as chips; more than this become a searchable list (see [SelectField]).
+const kChipLimit = 4;
+
+/// Choices in a row that scrolls sideways when there are few. With many (children, sessions, terms, classes, students) it becomes a
+/// searchable list that opens from a tap, like a select on the website. [select] forces one or the other.
 class Chips<T> extends StatelessWidget {
   final List<({T value, String label})> options;
   final T value;
   final ValueChanged<T> onChange;
-  const Chips({super.key, required this.options, required this.value, required this.onChange});
+
+  /// The heading of the list that opens when there are many choices.
+  final String title;
+  final bool? select;
+  const Chips({super.key, required this.options, required this.value, required this.onChange, this.title = 'Choose', this.select});
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        child: Row(children: [
-          for (final o in options)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Tap(
-                label: o.label,
-                onTap: () => onChange(o.value),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: o.value == value ? color.brand : color.card,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: o.value == value ? color.brand : color.line),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(o.label, style: Ty.custom(14, FontWeight.w600, c: o.value == value ? color.onBrand : color.ink)),
+  Widget build(BuildContext context) {
+    if (select ?? options.length > kChipLimit) return SelectField<T>(options: options, value: value, onChange: onChange, title: title);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      child: Row(children: [
+        for (final o in options)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Tap(
+              label: o.label,
+              onTap: () => onChange(o.value),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: o.value == value ? color.brand : color.card,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: o.value == value ? color.brand : color.line),
                 ),
+                alignment: Alignment.center,
+                child: Text(o.label, style: Ty.custom(14, FontWeight.w600, c: o.value == value ? color.onBrand : color.ink)),
               ),
             ),
-        ]),
+          ),
+      ]),
+    );
+  }
+}
+
+/// A choice from a long list. It shows what is chosen; a tap opens a sheet with a search box (when there are more than a handful of
+/// choices) and the list, so a school with hundreds of students or many sessions stays easy to use.
+class SelectField<T> extends StatelessWidget {
+  final List<({T value, String label})> options;
+  final T value;
+  final ValueChanged<T> onChange;
+  final String title;
+  final bool enabled;
+  const SelectField({super.key, required this.options, required this.value, required this.onChange, this.title = 'Choose', this.enabled = true});
+
+  String get _label {
+    for (final o in options) {
+      if (o.value == value) return o.label;
+    }
+    return options.isEmpty ? 'Nothing to choose' : 'Choose';
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final picked = await showAppSheet<({T v})>(context, title: title, tall: true, builder: (_) => _SelectSheet<T>(options: options, value: value));
+    if (picked != null && picked.v != value) onChange(picked.v);
+  }
+
+  @override
+  Widget build(BuildContext context) => Tap(
+        label: '$title: $_label',
+        onTap: enabled && options.isNotEmpty ? () => _open(context) : null,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 50),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(color: color.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: color.line)),
+          child: Row(children: [
+            Expanded(child: Text(_label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Ty.body(w: FontWeight.w600))),
+            const SizedBox(width: 8),
+            Icn('chevron-down', size: 18, tint: color.muted),
+          ]),
+        ),
       );
+}
+
+class _SelectSheet<T> extends StatefulWidget {
+  final List<({T value, String label})> options;
+  final T value;
+  const _SelectSheet({required this.options, required this.value});
+  @override
+  State<_SelectSheet<T>> createState() => _SelectSheetState<T>();
+}
+
+class _SelectSheetState<T> extends State<_SelectSheet<T>> {
+  final _q = TextEditingController();
+  String _term = '';
+
+  @override
+  void dispose() {
+    _q.dispose();
+    super.dispose();
+  }
+
+  /// Every word typed must appear somewhere in the label, in any order ("ade john" finds "John Adebayo").
+  List<({T value, String label})> _shown() {
+    final words = _term.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.isEmpty) return widget.options;
+    return [
+      for (final o in widget.options)
+        if (words.every(o.label.toLowerCase().contains)) o,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final all = widget.options;
+    final shown = _shown();
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (all.length > 6)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Field(icon: 'search-outline', hint: 'Search', controller: _q, autofocus: all.length > 12, autocorrect: false, action: TextInputAction.search, onChanged: (v) => setState(() => _term = v)),
+        ),
+      Flexible(
+        child: shown.isEmpty
+            ? Padding(padding: const EdgeInsets.all(28), child: Text('Nothing matches “${_term.trim()}”.', textAlign: TextAlign.center, style: Ty.small()))
+            : ListView.builder(
+                shrinkWrap: true,
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(10, 0, 10, 12 + MediaQuery.paddingOf(context).bottom),
+                itemCount: shown.length,
+                itemBuilder: (ctx, i) {
+                  final o = shown[i];
+                  final on = o.value == widget.value;
+                  return Tap(
+                    label: o.label,
+                    onTap: () => Navigator.of(ctx).pop((v: o.value)),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      margin: const EdgeInsets.only(bottom: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(color: on ? color.tint : Colors.transparent, borderRadius: BorderRadius.circular(14)),
+                      child: Row(children: [
+                        Expanded(child: Text(o.label, style: Ty.body(w: on ? FontWeight.w700 : FontWeight.w500))),
+                        if (on) Icn('checkmark', size: 20, tint: color.brand),
+                      ]),
+                    ),
+                  );
+                },
+              ),
+      ),
+    ]);
+  }
 }
 
 /// Chips from a plain list of value/label pairs.

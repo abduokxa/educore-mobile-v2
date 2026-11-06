@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import '../core/theme.dart';
@@ -249,11 +250,146 @@ class _DotsState extends State<Dots> with SingleTickerProviderStateMixin {
       );
 }
 
-class Spinner extends StatelessWidget {
+/// The loading ring: a faint track with a bright arc that stretches and shrinks as it turns, like the website's.
+class Spinner extends StatefulWidget {
   final double size;
   const Spinner({super.key, this.size = 20});
   @override
-  Widget build(BuildContext context) => SizedBox(width: size, height: size, child: CircularProgressIndicator(strokeWidth: 2.4, color: color.brand));
+  State<Spinner> createState() => _SpinnerState();
+}
+
+class _SpinnerState extends State<Spinner> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: 'Loading',
+        child: RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (_, _) => CustomPaint(size: Size.square(widget.size), painter: _SpinnerPainter(_c.value, color.brand, color.line)),
+          ),
+        ),
+      );
+}
+
+class _SpinnerPainter extends CustomPainter {
+  final double t;
+  final Color arc, track;
+  _SpinnerPainter(this.t, this.arc, this.track);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = math.max(2.0, size.width * 0.11);
+    final box = Offset(stroke / 2, stroke / 2) & Size(size.width - stroke, size.height - stroke);
+    final ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(box, 0, math.pi * 2, false, ring..color = track);
+    // Two turns each cycle, so the start never jumps when the cycle begins again; the arc breathes between a fifth and 60% of the ring.
+    final start = -math.pi / 2 + t * math.pi * 4;
+    final sweep = math.pi * 2 * (0.2 + 0.4 * (0.5 - 0.5 * math.cos(t * math.pi * 2)));
+    canvas.drawArc(box, start, sweep, false, ring..color = arc);
+  }
+
+  @override
+  bool shouldRepaint(_SpinnerPainter old) => old.t != t || old.arc != arc || old.track != track;
+}
+
+/// A thin glowing bar across the top while something loads. It eases towards 90% and never stalls, then completes and fades.
+class LoadBar extends StatefulWidget {
+  final bool active;
+  const LoadBar({super.key, required this.active});
+  @override
+  State<LoadBar> createState() => _LoadBarState();
+}
+
+class _LoadBarState extends State<LoadBar> with SingleTickerProviderStateMixin {
+  static const _span = 12; // seconds the controller covers
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: _span));
+  bool _on = false, _full = false;
+  Timer? _hide;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _begin();
+  }
+
+  void _begin() {
+    _hide?.cancel();
+    _on = true;
+    _full = false;
+    _c.forward(from: 0);
+  }
+
+  void _end() {
+    _c.stop();
+    _full = true;
+    _hide = Timer(const Duration(milliseconds: 320), () {
+      if (mounted) {
+        setState(() {
+          _on = false;
+          _full = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(LoadBar old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) {
+      setState(_begin);
+    } else if (!widget.active && old.active && _on) {
+      setState(_end);
+    }
+  }
+
+  @override
+  void dispose() {
+    _hide?.cancel();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: AnimatedOpacity(
+          opacity: _on ? 1 : 0,
+          duration: const Duration(milliseconds: 200),
+          child: SizedBox(
+            height: 3,
+            width: double.infinity,
+            child: AnimatedBuilder(
+              animation: _c,
+              builder: (_, _) {
+                // 1 - e^(-s/1.4): quick at first, then slower and slower, always short of 90%.
+                final pct = _full ? 1.0 : 0.08 + 0.82 * (1 - math.exp(-(_c.value * _span) / 1.4));
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: pct,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: color.brand,
+                        borderRadius: const BorderRadius.horizontal(right: Radius.circular(3)),
+                        boxShadow: [BoxShadow(color: color.brand.withValues(alpha: 0.55), blurRadius: 8)],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
 }
 
 /// A number that counts up to its value.

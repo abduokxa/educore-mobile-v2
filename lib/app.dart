@@ -327,11 +327,15 @@ class _EducoreAppState extends State<EducoreApp> {
     if (!_ready) {
       return Scaffold(
         body: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Pop(child: Container(width: 72, height: 72, decoration: BoxDecoration(color: color.brand, borderRadius: BorderRadius.circular(24)), child: Icn('school', size: 36, tint: color.onBrand))),
-            const SizedBox(height: 18),
-            const Spinner(size: 22),
-          ]),
+          // The school mark with the loading ring turning around it, as on the website.
+          child: SizedBox(
+            width: 112,
+            height: 112,
+            child: Stack(alignment: Alignment.center, children: [
+              const Spinner(size: 112),
+              Pop(child: Container(width: 72, height: 72, decoration: BoxDecoration(color: color.brand, borderRadius: BorderRadius.circular(24)), child: Icn('school', size: 36, tint: color.onBrand))),
+            ]),
+          ),
         ),
       );
     }

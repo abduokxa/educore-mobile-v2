@@ -92,7 +92,7 @@ class _TeacherRegisterState extends State<TeacherRegister> {
             const PageTitle('Mark attendance', sub: 'Choose the class and the day, then continue to the student list.'),
             ECard(title: 'Which register?', icon: 'options-outline', gap: 14, children: [
               if (classes.length > 1)
-                PickGroup('Class', Chips<String>(value: '${d['class']['id']}', onChange: (v) => setState(() => _class = v), options: [for (final c in classes) (value: '${c['id']}', label: '${c['name']}')]))
+                PickGroup('Class', Chips<String>(title: 'Class', select: true, value: '${d['class']['id']}', onChange: (v) => setState(() => _class = v), options: [for (final c in classes) (value: '${c['id']}', label: '${c['name']}')]))
               else
                 PickGroup('Class', Text('${d['class']['name']}', style: Ty.body(w: FontWeight.w700))),
               DateField(label: 'Day', value: '${d['date']}', onChange: (v) => setState(() => _date = v)),
@@ -253,9 +253,9 @@ class _ScoresPick extends StatelessWidget {
     return Screen(onRefresh: reload, children: [
       const PageTitle('Enter scores', sub: 'Choose the class, the subject and the exam, then continue to the student list.'),
       ECard(title: 'Which scores?', icon: 'options-outline', gap: 14, children: [
-        PickGroup('Class', Chips<String>(value: cls, onChange: (v) => pick(v, null, '${comp['key']}'), options: [for (final o in classes) (value: '${o['class_id']}', label: '${o['class']}')])),
-        PickGroup('Subject', Chips<String>(value: '${data['subject']['id']}', onChange: (v) => pick(cls, v, '${comp['key']}'), options: [for (final o in subjects) (value: '${o['subject_id']}', label: '${o['subject']}')])),
-        PickGroup('Exam', Chips<String>(value: '${comp['key']}', onChange: (v) => pick(cls, '${data['subject']['id']}', v), options: [for (final k in comps) (value: '${k['key']}', label: '${k['short']}')])),
+        PickGroup('Class', Chips<String>(title: 'Class', select: true, value: cls, onChange: (v) => pick(v, null, '${comp['key']}'), options: [for (final o in classes) (value: '${o['class_id']}', label: '${o['class']}')])),
+        PickGroup('Subject', Chips<String>(title: 'Subject', select: true, value: '${data['subject']['id']}', onChange: (v) => pick(cls, v, '${comp['key']}'), options: [for (final o in subjects) (value: '${o['subject_id']}', label: '${o['subject']}')])),
+        PickGroup('Exam', Chips<String>(title: 'Exam', value: '${comp['key']}', onChange: (v) => pick(cls, '${data['subject']['id']}', v), options: [for (final k in comps) (value: '${k['key']}', label: '${k['short']}')])),
         Muted(comp['open'] == true ? 'Open for entry${comp['due'] != null ? ', due ${comp['due']}' : ''}.' : 'Not open for entry yet. You can still look at the list.'),
       ]),
       AppButton('Continue', icon: 'arrow-forward', onPressed: go),

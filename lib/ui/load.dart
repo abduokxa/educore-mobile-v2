@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/net.dart';
@@ -104,26 +105,75 @@ class _LoadViewState extends State<LoadView> {
   }
 }
 
-/// The placeholder while a screen loads (a few shimmering blocks in the shape of cards), or the error with a way to try again.
-class Loading extends StatelessWidget {
+/// The placeholder while a screen loads: nothing at first (a quick load never flashes), then a glowing bar across the top and shapes in the
+/// place of the cards. After a few seconds it says so, and after a longer wait it offers to try again. Or the error, with a way to try again.
+class Loading extends StatefulWidget {
   final String? error;
   final Future<void> Function() retry;
   const Loading({super.key, this.error, required this.retry});
   @override
+  State<Loading> createState() => _LoadingState();
+}
+
+class _LoadingState extends State<Loading> {
+  bool _seen = false;
+  int _stage = 0; // 1: slow, 2: slower
+  final List<Timer> _timers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _timers.add(Timer(const Duration(milliseconds: 120), () => _set(() => _seen = true)));
+    _timers.add(Timer(const Duration(seconds: 4), () => _set(() => _stage = 1)));
+    _timers.add(Timer(const Duration(seconds: 12), () => _set(() => _stage = 2)));
+  }
+
+  void _set(VoidCallback f) {
+    if (mounted) setState(f);
+  }
+
+  @override
+  void dispose() {
+    for (final t in _timers) {
+      t.cancel();
+    }
+    super.dispose();
+  }
+
+  Widget _row() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(children: [
+          const Skeleton(w: 42, h: 42, r: 21),
+          const SizedBox(width: 12),
+          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Skeleton(h: 14, w: 150), SizedBox(height: 8), Skeleton(h: 11)])),
+        ]),
+      );
+
+  @override
   Widget build(BuildContext context) {
-    if (error != null) {
+    if (widget.error != null) {
       return Screen(children: [
-        Empty(icon: 'cloud-offline-outline', title: 'Could not load this', body: error, action: AppButton('Try again', kind: BtnKind.soft, icon: 'refresh', onPressed: retry)),
+        Empty(icon: 'cloud-offline-outline', title: 'Could not load this', body: widget.error, action: AppButton('Try again', kind: BtnKind.soft, icon: 'refresh', onPressed: widget.retry)),
       ]);
     }
-    return Screen(children: [
-      const Skeleton(h: 30, w: 180, r: 8),
-      for (var i = 0; i < 3; i++)
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: color.card, borderRadius: BorderRadius.circular(22), border: Border.all(color: color.line)),
-          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Skeleton(h: 16, w: 140), SizedBox(height: 12), Skeleton(h: 12), SizedBox(height: 8), Skeleton(h: 12, w: 200)]),
-        ),
+    return Stack(fit: StackFit.expand, children: [
+      if (_seen)
+        Screen(children: [
+          const Skeleton(h: 28, w: 170, r: 8),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            decoration: BoxDecoration(color: color.card, borderRadius: BorderRadius.circular(22), border: Border.all(color: color.line)),
+            child: Column(children: [_row(), _row(), _row(), _row()]),
+          ),
+          if (_stage > 0)
+            Column(children: [
+              Text(_stage == 1 ? 'Still loading…' : 'This is taking longer than usual. Check your connection.', textAlign: TextAlign.center, style: Ty.small()),
+              if (_stage == 2) ...[const SizedBox(height: 10), AppButton('Try again', kind: BtnKind.soft, icon: 'refresh', onPressed: widget.retry)],
+            ]),
+        ])
+      else
+        ColoredBox(color: color.bg),
+      const Positioned(top: 0, left: 0, right: 0, child: SafeArea(bottom: false, child: LoadBar(active: true))),
     ]);
   }
 }

@@ -50,9 +50,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('What would you like to see?'), findsOneWidget);
       expect(find.textContaining('showing'), findsNothing);
-      // The current session and term are already chosen.
+      // The current session and term are already chosen; a tap on the term opens its list.
+      await tester.tap(find.text('2nd Term (current)'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('1st Term'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
       expect(find.text('showing 2025/2026 · 1st Term'), findsOneWidget);
@@ -61,8 +63,10 @@ void main() {
     testWidgets('another session offers its own terms', (tester) async {
       await tester.pumpWidget(host(PickGate(title: 'My results', builder: (context, c) => Text('showing ${c.summary}'))));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('2025/2026 (current)'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('2024/2025'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.text('3rd Term'), findsOneWidget);
       expect(find.text('2nd Term (current)'), findsNothing);
       await tester.tap(find.text('Continue'));
@@ -78,6 +82,42 @@ void main() {
       await tester.tap(find.text('Change'));
       await tester.pumpAndSettle();
       expect(find.text('What would you like to see?'), findsOneWidget);
+    });
+  });
+
+  group('searchable lists', () {
+    List<({String value, String label})> people(int n) => [for (var i = 0; i < n; i++) (value: 'id$i', label: i == 3 ? 'John Adebayo' : 'Pupil number $i')];
+
+    testWidgets('a few choices stay as chips', (tester) async {
+      await tester.pumpWidget(host(Chips<String>(value: 'a', onChange: (_) {}, options: opts(const [('a', 'One'), ('b', 'Two'), ('c', 'Three')]))));
+      expect(find.byType(SelectField<String>), findsNothing);
+      expect(find.text('Two'), findsOneWidget);
+    });
+
+    testWidgets('many choices open a list that can be searched in any word order', (tester) async {
+      String? chosen;
+      await tester.pumpWidget(host(Chips<String>(title: 'Student', value: 'id0', onChange: (v) => chosen = v, options: people(40))));
+      expect(find.byType(SelectField<String>), findsOneWidget);
+      expect(find.text('Pupil number 0'), findsOneWidget);
+      await tester.tap(find.byType(SelectField<String>));
+      await tester.pumpAndSettle();
+      expect(find.text('Pupil number 5'), findsOneWidget); // in the list
+      await tester.enterText(find.byType(TextField), 'ade john');
+      await tester.pumpAndSettle();
+      expect(find.text('Pupil number 5'), findsNothing);
+      expect(find.text('John Adebayo'), findsOneWidget);
+      await tester.tap(find.text('John Adebayo'));
+      await tester.pumpAndSettle();
+      expect(chosen, 'id3');
+    });
+
+    testWidgets('a search with no match says so', (tester) async {
+      await tester.pumpWidget(host(Chips<String>(title: 'Student', value: 'id0', onChange: (_) {}, options: people(40))));
+      await tester.tap(find.byType(SelectField<String>));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'zzz');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Nothing matches'), findsOneWidget);
     });
   });
 }

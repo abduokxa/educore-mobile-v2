@@ -60,7 +60,7 @@ class _ReplyBoxState extends State<_ReplyBox> {
           final id = _student.isEmpty ? '${students.first['id']}' : _student;
           final who = students.cast<dynamic>().where((x) => '${x['id']}' == id).firstOrNull;
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (students.length > 1) Chips<String>(value: id, onChange: (v) => setState(() => _student = v), options: [for (final x in students) (value: '${x['id']}', label: '${x['name']}')]),
+            if (students.length > 1) Chips<String>(title: 'Student', select: true, value: id, onChange: (v) => setState(() => _student = v), options: [for (final x in students) (value: '${x['id']}', label: '${x['name']}')]),
             const SizedBox(height: 10),
             Field(label: who?['to'] != null ? 'Reply to ${who['to']}' : 'Your reply', controller: _msg, hint: 'Write your reply', multiline: true, maxLength: 1500, onChanged: (_) => setState(() {})),
             const SizedBox(height: 10),

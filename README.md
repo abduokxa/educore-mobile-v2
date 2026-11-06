@@ -124,3 +124,9 @@ lib/shell     tab bar, tab navigation, connectivity banner
 ```
 
 Not ported from the old app: the Android home-screen widget.
+
+## Crash reports, updates and the app lock
+
+- **Crash reports.** Release builds send crashes to Firebase Crashlytics (the same Firebase project as push notices), so crashes the platform cannot see are visible in the Firebase console under Crashlytics. In Play Console → App content → Data safety, say the app collects **crash logs** (App info and performance → Crash logs), shared with Firebase, not linked to identity, used for app functionality/analytics.
+- **Updates.** When the app was installed from Google Play and a newer release exists, the *Update* button updates inside the app. A release marked high priority (4 or 5) in Play Console takes over the screen; any other downloads while the person keeps working and then restarts the app. An APK installed by hand falls back to the download link from the platform's Mobile app settings.
+- **App lock.** Account → App lock → On. The person chooses how long the app may be away before it asks again: always, 1, 5 or 15 minutes.
